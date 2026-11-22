@@ -1,0 +1,40 @@
+# Mapas próprios do Bazá: imagens do mapa, rotas e pesquisa de moradas, tudo com
+# dados do OpenStreetMap a correr no nosso servidor (sem serviços públicos).
+#
+#   1.ª vez:   ./preparar.sh        (descarrega e prepara os dados de Angola)
+#   arrancar:  docker compose up -d
+#   parar:     docker compose down
+#
+# As portas só ficam abertas para a própria máquina: quem fala com estes
+# serviços é a API do Bazá, nunca o telemóvel directamente.
+name: baza-mapas
+
+services:
+  # Imagens do mapa (PNG), desenhadas a partir de dados/angola.pmtiles.
+  mapa:
+    image: maptiler/tileserver-gl:latest
+    command: ["--config", "/data/config.json", "--port", "8080"]
+    volumes:
+      - ./tiles:/data
+      - ./dados:/data/dados:ro
+    ports: ["127.0.0.1:8080:8080"]
+    restart: unless-stopped
+
+  # Rotas, distâncias e tempos de viagem (OSRM).
+  rotas:
+    image: ghcr.io/project-osrm/osrm-backend:latest
+    command: ["osrm-routed", "--algorithm", "mld", "--max-matching-size", "1000", "/dados/osrm/angola-latest.osrm"]
+    volumes:
+      - ./dados:/dados:ro
+    ports: ["127.0.0.1:5000:5000"]
+    restart: unless-stopped
+
+  # Pesquisa de locais enquanto se escreve, e morada de um ponto (Photon).
+  pesquisa:
+    image: eclipse-temurin:21-jre
+    working_dir: /dados/photon
+    command: ["java", "-Xmx768m", "-jar", "/dados/photon.jar", "serve", "-listen-ip", "0.0.0.0", "-default-language", "pt", "-languages", "pt,en,fr"]
+    volumes:
+      - ./dados:/dados
+    ports: ["127.0.0.1:2322:2322"]
+    restart: unless-stopped

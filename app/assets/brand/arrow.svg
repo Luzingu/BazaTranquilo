@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Só a seta do símbolo do Bazá, para usar sobre fundo amarelo. -->
+  <path d="M74 25 L26 44.5 L46.5 53.5 L55.5 74 Z" fill="#14161A" stroke="#14161A" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M66 33 L46.5 53.5" stroke="#FFC400" stroke-width="4" stroke-linecap="round"/>
+</svg>

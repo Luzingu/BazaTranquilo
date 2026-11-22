@@ -1,0 +1,20 @@
+{
+  "options": {
+    "paths": {
+      "root": "/data",
+      "fonts": "fonts",
+      "sprites": "sprites",
+      "styles": "styles",
+      "pmtiles": "dados"
+    },
+    "formatOptions": { "png": { "compressionLevel": 6 } },
+    "maxSize": 2048,
+    "serveAllFonts": true
+  },
+  "styles": {
+    "baza": { "style": "baza.json", "tilejson": { "bounds": [11.4, -18.2, 24.2, -4.2] } }
+  },
+  "data": {
+    "angola": { "pmtiles": "angola.pmtiles" }
+  }
+}

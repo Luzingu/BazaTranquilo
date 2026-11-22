@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ecrã mostrado pelo Android enquanto o app arranca: amarelo do Bazá com a
+     seta ao centro, para não haver um clarão branco antes do ecrã de entrada. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/baza_yellow" />
+    <item>
+        <bitmap android:gravity="center" android:src="@drawable/splash_mark" />
+    </item>
+</layer-list>

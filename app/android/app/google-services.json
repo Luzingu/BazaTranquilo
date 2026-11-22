@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "404183980829",
+    "project_id": "baza-8ac05",
+    "storage_bucket": "baza-8ac05.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:404183980829:android:2ca66404907f85464c1ff4",
+        "android_client_info": {
+          "package_name": "ao.baza.baza"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC22tbJrbDGrsQZRO2YI8XFF8xauQpZn8g"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

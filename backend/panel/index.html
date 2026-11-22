@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="pt">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Painel — Bazá Tranquilo</title>
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="painel.css">
+  <script src="tema.js"></script>
+</head>
+<body>
+  <!-- Entrada e registo de frota -->
+  <main id="auth" hidden>
+    <!-- Mensagem sobre a imagem de fundo (escondida em ecrãs estreitos) -->
+    <div class="auth-hero">
+      <div class="brand light"><span class="mark" aria-hidden="true"></span>Bazá <span class="thin">Tranquilo</span></div>
+      <p class="tagline">Bazá com<br>Segurança.</p>
+      <p class="sub">Gira motoristas e frotas, reveja documentos e acompanhe as corridas no mapa, em tempo real.</p>
+    </div>
+    <div class="auth-card">
+      <div class="brand"><span class="mark" aria-hidden="true"></span>Bazá</div>
+      <h1 id="auth-title">Painel de gestão</h1>
+      <p class="muted" id="auth-sub">Para administradores e frotas parceiras.</p>
+
+      <form id="login-form">
+        <label>Email <input type="email" name="email" autocomplete="username" required></label>
+        <label>Palavra-passe <input type="password" name="password" autocomplete="current-password" required></label>
+        <p class="error" role="alert" hidden></p>
+        <button class="btn primary" type="submit">Entrar</button>
+        <button class="btn link" type="button" data-show="register">Registar a minha frota</button>
+      </form>
+
+      <form id="register-form" hidden>
+        <label>Nome da empresa <input name="name" required minlength="2" maxlength="80"></label>
+        <label>NIF <input name="nif" required minlength="5" maxlength="20"></label>
+        <label>Email <input type="email" name="email" autocomplete="username" required></label>
+        <label>Telefone <input type="tel" name="phone" placeholder="923 456 789" required></label>
+        <label>Palavra-passe <input type="password" name="password" autocomplete="new-password" required minlength="8">
+          <small>Pelo menos 8 caracteres</small></label>
+        <label>Repita a palavra-passe <input type="password" name="confirm" autocomplete="new-password" required minlength="8"></label>
+        <p class="error" role="alert" hidden></p>
+        <button class="btn primary" type="submit">Enviar registo</button>
+        <button class="btn link" type="button" data-show="login">Já tenho conta</button>
+      </form>
+
+      <div id="register-done" hidden>
+        <p><strong>Registo enviado.</strong> A sua frota fica em análise; poderá entrar assim que um administrador a aprovar.</p>
+        <button class="btn" type="button" data-show="login">Voltar à entrada</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- Painel -->
+  <div id="app" hidden>
+    <aside>
+      <div class="brand"><span class="mark" aria-hidden="true"></span>Bazá</div>
+      <nav id="nav" aria-label="Secções"></nav>
+    </aside>
+    <div class="main">
+      <!-- Barra do topo: onde se está, quem tem a sessão, tema e saída -->
+      <header id="topbar">
+        <p id="crumb" class="crumb"></p>
+        <div class="top-actions">
+          <button class="icon-btn" id="theme" type="button"></button>
+          <div class="user" id="user">
+            <span class="avatar" id="who-initial" aria-hidden="true"></span>
+            <span class="user-text"><strong id="who-name"></strong><span id="who-role" class="muted"></span></span>
+          </div>
+          <button class="btn small" id="logout" type="button"></button>
+        </div>
+      </header>
+      <section id="view" tabindex="-1"></section>
+    </div>
+  </div>
+
+  <!-- Janela para criar e editar (o conteúdo é posto pelo painel.js) -->
+  <dialog id="modal" aria-labelledby="modal-title"></dialog>
+
+  <!-- Imagem de um documento em tamanho grande -->
+  <dialog id="viewer"><img alt="Documento do motorista"><form method="dialog"><button class="btn">Fechar</button></form></dialog>
+
+  <script src="vendor/leaflet/leaflet.js"></script>
+  <script src="painel.js"></script>
+</body>
+</html>

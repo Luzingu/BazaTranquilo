@@ -1,0 +1,7 @@
+node_modules
+dist
+.env
+uploads
+private
+firebase-chave.json
+*adminsdk*.json

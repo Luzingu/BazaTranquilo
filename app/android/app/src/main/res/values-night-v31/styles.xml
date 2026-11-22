@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+: o sistema desenha o seu próprio ecrã de arranque; damos-lhe
+         a cor e o símbolo do Bazá. -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">@drawable/launch_background</item>
+        <item name="android:windowSplashScreenBackground">@color/baza_yellow</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_mark</item>
+    </style>
+</resources>

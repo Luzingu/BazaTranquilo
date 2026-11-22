@@ -1,0 +1,4 @@
+node_modules
+.DS_Store
+baza-servidor.tar.gz
+.claude/
