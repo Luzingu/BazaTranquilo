@@ -332,18 +332,10 @@ class _PhoneSheetState extends State<_PhoneSheet> {
   Widget build(BuildContext context) {
     if (_pending == null) {
       return _sheetBody(context, 'Novo número de telefone', [
-        TextField(
+        PhoneField(
           controller: _phone,
-          textInputAction: TextInputAction.done,
-          onSubmitted: (_) => _submitKey.currentState?.trigger(),
           autofocus: true,
-          keyboardType: TextInputType.phone,
-          inputFormatters: const [PhoneInputFormatter()],
-          decoration: const InputDecoration(
-            labelText: 'Número de telefone',
-            hintText: '923 456 789',
-            prefixText: '+244  ',
-          ),
+          onSubmitted: () => _submitKey.currentState?.trigger(),
         ),
         const SizedBox(height: 8),
         const Text(
@@ -450,17 +442,10 @@ class _EmergencySheetState extends State<_EmergencySheet> {
         ),
       ),
       const SizedBox(height: 12),
-      TextField(
+      PhoneField(
         controller: _phone,
-        keyboardType: TextInputType.phone,
-        textInputAction: TextInputAction.done,
-        inputFormatters: const [PhoneInputFormatter()],
-        onSubmitted: (_) => _submitKey.currentState?.trigger(),
-        decoration: const InputDecoration(
-          labelText: 'Telefone',
-          hintText: '923 456 789',
-          prefixText: '+244  ',
-        ),
+        label: 'Telefone do contacto',
+        onSubmitted: () => _submitKey.currentState?.trigger(),
       ),
       const SizedBox(height: 16),
       AsyncButton(key: _submitKey, label: 'Guardar', onPressed: _save),

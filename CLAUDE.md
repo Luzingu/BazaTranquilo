@@ -33,7 +33,7 @@ App de táxi para Angola (nome completo "Bazá Tranquilo", lema "Bazá com Segur
 ## Um número, um só tipo de conta (decidido pelo utilizador, 2026-11-24)
 
 - O mesmo telefone **não pode** ser de um passageiro e de um motorista. O servidor verifica em todos os sítios onde se cria conta ou se muda de número (`assertPhoneFreeForRole` em `backend/src/models/accounts.ts`: `/auth/start`, `/auth/otp/*`, `/auth/signup`, mudar telefone, frota a registar motorista) e responde `409` com `otherRole`.
-- No ecrã de entrada, primeiro escolhe-se em grande "Quero viajar" (cartão amarelo) ou "Quero conduzir" (cartão escuro); o app lembra-se da escolha neste aparelho (`lastRole`) e o tipo fica sempre à vista num cartão da mesma cor, com "Trocar". Se o número for do outro tipo, o app pergunta "Este número é de motorista — Entrar como motorista?" antes de enviar qualquer SMS.
+- No ecrã de entrada **entra-se por defeito como passageiro** (decidido pelo utilizador, 2026-11-24); o cartão do topo (amarelo para passageiro, escuro para motorista) tem o botão "Sou motorista" / "Sou passageiro" numa linha própria, que troca de uma vez, e o app lembra-se da escolha neste aparelho (`lastRole`). Os Termos ficam num rodapé que se ajusta ao ecrã (no fundo em ecrãs altos; a seguir ao botão em ecrãs pequenos ou com o teclado aberto). Se o número for do outro tipo, o app pergunta "Este número é de motorista — Entrar como motorista?" antes de enviar qualquer SMS.
 - Duplas antigas: fica a conta de motorista; a de passageiro é **desactivada, sem apagar** (`deactivatedAt`, telefone em `formerPhone`), com `backend/scripts/desactivar-passageiros-com-numero-de-motorista.ts --aplicar` (ver `PRODUCAO.md`). Conta desactivada não entra (sessões e ligações em tempo real caem).
 
 ## Regras
@@ -69,6 +69,7 @@ Detalhes, comandos e tabelas em `PRODUCAO.md`. A instalação num servidor real 
 - **Computador:** em ecrãs com 900 px ou mais, o app inteiro aparece numa janela centrada de 460 px (`app/lib/widgets/desktop_frame.dart`, ligada em `MaterialApp.builder`), com o painel da marca à esquerda a partir de 1100 px. Os ecrãs continuam a ser os do telemóvel: não desenhar variantes largas ecrã a ecrã.
 - **Nenhuma janela fecha ao tocar fora dela:** `showDialog(barrierDismissible: false)` e `showModalBottomSheet(isDismissible: false, showDragHandle: true)`. Toda a janela tem de ter forma de fechar (botão; nos painéis inferiores, também a pega).
 - **Enter submete sempre o formulário** (`onSubmitted` → acção principal).
+- **Pensar em quem tem pouca prática com o telemóvel** (decidido pelo utilizador, 2026-11-24): ícones grandes e com cor ao lado do texto, ajudas que dizem o que falta. Campos de número de telefone: usar **sempre** `PhoneField` (`app/lib/widgets/common.dart`) — ícone de telefone num quadrado amarelo, +244 em destaque, algarismos grandes e ajuda ao vivo («Faltam 3 números», verde com visto quando completo, aviso se não começar por 9).
 - Depois de mudar o app, recompilar a versão web e ver capturas em telemóvel e em computador antes de entregar.
 
 ## Instalação actual (2026-11-22)

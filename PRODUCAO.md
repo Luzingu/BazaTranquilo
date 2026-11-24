@@ -261,7 +261,7 @@ Página inicial: `site/index.html` é um ficheiro só (HTML, CSS e JavaScript), 
 
 Por fazer nesta instalação:
 
-- **Regra "um número, um só tipo de conta" (2026-11-24):** logo **depois** de reiniciar a API com esta versão (nunca antes — o servidor antigo criaria uma conta nova ao passageiro desactivado), desactivar o lado passageiro das duplas antigas. Primeiro ver, depois aplicar:
+- ✅ **Feito a 2026-11-24 (6 contas desactivadas).** Fica a nota para uma reinstalação. **Regra "um número, um só tipo de conta" (2026-11-24):** logo **depois** de reiniciar a API com esta versão (nunca antes — o servidor antigo criaria uma conta nova ao passageiro desactivado), desactivar o lado passageiro das duplas antigas. Primeiro ver, depois aplicar:
   `cd /var/www/BazaTranquilo/backend && npx tsx scripts/desactivar-passageiros-com-numero-de-motorista.ts` e depois o mesmo com `--aplicar`. A 24/11 eram 6 (todos os motoristas). Nada se apaga: o número passa para `formerPhone`, as corridas ficam, e o painel mostra a conta como "Desactivada · número de motorista". Correr de novo não faz mal (salta quem já está tratado e quem estiver numa corrida).
 - Registar o domínio na Google Search Console e enviar o `sitemap.xml`.
 

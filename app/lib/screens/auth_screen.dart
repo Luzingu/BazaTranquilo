@@ -12,13 +12,14 @@ import '../state/session.dart';
 import '../widgets/common.dart';
 import 'splash_screen.dart';
 
-/// Entrada no app: primeiro escolhe-se, em grande, se vai viajar ou conduzir
-/// (o app lembra-se da escolha neste aparelho); depois escreve-se o número. O
-/// tipo escolhido fica sempre à vista num cartão com cor própria (amarelo para
-/// passageiro, escuro para motorista). Cada número só tem um tipo de conta: se
-/// o número for do outro tipo, o app pergunta se quer entrar nesse.
+/// Entrada no app: por defeito entra-se como passageiro; o botão "Sou
+/// motorista" (ou "Sou passageiro") no cartão do topo troca, e o app lembra-se
+/// da escolha neste aparelho. O tipo fica sempre à vista num cartão com cor
+/// própria (amarelo para passageiro, escuro para motorista). Cada número só tem
+/// um tipo de conta: se o número for do outro tipo, o app pergunta se quer
+/// entrar nesse.
 ///
-/// Escrito o número, O servidor
+/// Escrito o número, o servidor
 /// decide o passo seguinte, conforme o que está definido no painel: código SMS
 /// ou senha. A senha é pedida automaticamente quando o código está desligado,
 /// quando o envio do SMS falha, ou quando o código não chega. Se o SMS falhar a
@@ -41,11 +42,11 @@ class _AuthScreenState extends State<AuthScreen> {
   static const _codeWait = Duration(seconds: 60);
 
   // Cada número tem um só tipo de conta; o escolhido aqui decide em qual se
-  // entra (ou que tipo se cria).
+  // entra (ou que tipo se cria). Por defeito, passageiro.
   String _role = 'passenger';
 
-  /// Já escolheu (agora ou numa vez anterior, neste aparelho) se viaja ou conduz.
-  bool _roleChosen = false;
+  /// A escolha guardada já foi lida (evita mostrar passageiro e saltar logo
+  /// para motorista).
   bool _roleLoaded = false;
   static const _storage = FlutterSecureStorage();
 
@@ -55,8 +56,8 @@ class _AuthScreenState extends State<AuthScreen> {
     _loadRole();
   }
 
-  /// A escolha da vez anterior neste aparelho. Se o armazenamento falhar,
-  /// mostra-se a escolha (nunca um ecrã vazio).
+  /// A escolha da vez anterior neste aparelho; sem nenhuma (ou se o
+  /// armazenamento falhar), fica passageiro.
   Future<void> _loadRole() async {
     String? saved;
     try {
@@ -66,27 +67,15 @@ class _AuthScreenState extends State<AuthScreen> {
     }
     if (!mounted) return;
     setState(() {
-      if (saved == 'passenger' || saved == 'driver') {
-        _role = saved!;
-        _roleChosen = true;
-      }
+      if (saved == 'passenger' || saved == 'driver') _role = saved!;
       _roleLoaded = true;
     });
   }
 
   void _chooseRole(String role) {
     clearError(context);
-    setState(() {
-      _role = role;
-      _roleChosen = true;
-    });
+    setState(() => _role = role);
     _storage.write(key: 'lastRole', value: role);
-  }
-
-  /// Volta ao ecrã de escolha (botão "Trocar").
-  void _changeRole() {
-    _restart();
-    setState(() => _roleChosen = false);
   }
 
   _Step _step = _Step.phone;
@@ -272,43 +261,61 @@ class _AuthScreenState extends State<AuthScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: BazaLogo(size: 44),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                '$appFullName · $appSlogan',
-                style: TextStyle(
-                  color: BazaColors.muted,
-                  fontWeight: FontWeight.w600,
+        // O conteúdo em cima e, no passo do número, os Termos num rodapé:
+        // em ecrãs altos ficam no fundo; em ecrãs pequenos (ou com o teclado
+        // aberto) vêm logo a seguir ao botão e deslizam com o resto.
+        child: CustomScrollView(
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(24, 32, 24, 0),
+              sliver: SliverToBoxAdapter(child: _content()),
+            ),
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 28, 24, 16),
+                  child: _roleLoaded && _step == _Step.phone
+                      ? const LegalLinks(
+                          prefix: 'Ao continuar, aceita os',
+                          center: true,
+                        )
+                      : const SizedBox.shrink(),
                 ),
               ),
-              const SizedBox(height: 24),
-              if (!_roleLoaded)
-                const SizedBox.shrink()
-              else if (!_roleChosen)
-                ..._roleStep()
-              else ...[
-                _RoleBanner(
-                  driver: _isDriver,
-                  // Só se troca antes de escrever o número; depois, "Usar outro número".
-                  onChange: _step == _Step.phone ? _changeRole : null,
-                ),
-                const SizedBox(height: 22),
-                ..._stepWidgets(),
-              ],
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
+
+  Widget _content() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      const Align(alignment: Alignment.centerLeft, child: BazaLogo(size: 44)),
+      const SizedBox(height: 6),
+      const Text(
+        '$appFullName · $appSlogan',
+        style: TextStyle(color: BazaColors.muted, fontWeight: FontWeight.w600),
+      ),
+      const SizedBox(height: 24),
+      if (!_roleLoaded)
+        const SizedBox.shrink()
+      else ...[
+        _RoleBanner(
+          driver: _isDriver,
+          // Só se troca antes de escrever o número; depois, "Usar outro número".
+          onSwitch: _step == _Step.phone
+              ? () => _chooseRole(_isDriver ? 'passenger' : 'driver')
+              : null,
+        ),
+        const SizedBox(height: 22),
+        ..._stepWidgets(),
+      ],
+    ],
+  );
 
   List<Widget> _stepWidgets() => [
     ...switch (_step) {
@@ -320,48 +327,11 @@ class _AuthScreenState extends State<AuthScreen> {
     },
   ];
 
-  /// Primeira vez neste aparelho: escolhe-se, em grande, se vai viajar ou conduzir.
-  List<Widget> _roleStep() => [
-    const Text(
-      'Como vai usar o Bazá?',
-      style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800),
-    ),
-    const SizedBox(height: 6),
-    const Text(
-      'Escolha uma opção. Cada número de telefone tem um só tipo de conta.',
-      style: TextStyle(color: BazaColors.muted, fontSize: 16),
-    ),
-    const SizedBox(height: 22),
-    _RoleCard(
-      driver: false,
-      title: 'Quero viajar',
-      text: 'Peça táxi, moto ou carga e acompanhe o motorista no mapa.',
-      onTap: () => _chooseRole('passenger'),
-    ),
-    const SizedBox(height: 14),
-    _RoleCard(
-      driver: true,
-      title: 'Quero conduzir',
-      text: 'Receba pedidos de corrida com a sua viatura.',
-      onTap: () => _chooseRole('driver'),
-    ),
-    const SizedBox(height: 20),
-    const LegalLinks(prefix: 'Ao continuar, aceita os'),
-  ];
-
   List<Widget> _phoneStep() => [
-    TextField(
+    PhoneField(
       controller: _phone,
-      textInputAction: TextInputAction.done,
-      onSubmitted: (_) => _submitKey.currentState?.trigger(),
-      keyboardType: TextInputType.phone,
-      autofillHints: const [AutofillHints.telephoneNumber],
-      inputFormatters: const [PhoneInputFormatter()],
-      decoration: const InputDecoration(
-        labelText: 'Número de telefone',
-        hintText: '923 456 789',
-        prefixText: '+244  ',
-      ),
+      autofill: true,
+      onSubmitted: () => _submitKey.currentState?.trigger(),
     ),
     const SizedBox(height: 8),
     const Text(
@@ -370,8 +340,6 @@ class _AuthScreenState extends State<AuthScreen> {
     ),
     const SizedBox(height: 20),
     AsyncButton(key: _submitKey, label: 'Continuar', onPressed: _start),
-    const SizedBox(height: 14),
-    const LegalLinks(prefix: 'Ao continuar, aceita os'),
   ];
 
   Widget _who() => Padding(
@@ -588,140 +556,91 @@ class _AuthScreenState extends State<AuthScreen> {
   ];
 }
 
-/// Cartão grande da escolha inicial: amarelo para quem viaja, escuro para quem conduz.
-class _RoleCard extends StatelessWidget {
-  const _RoleCard({
-    required this.driver,
-    required this.title,
-    required this.text,
-    required this.onTap,
-  });
-  final bool driver;
-  final String title, text;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final fg = driver ? Colors.white : BazaColors.ink;
-    return Semantics(
-      button: true,
-      label: title,
-      child: Material(
-        color: driver ? BazaColors.ink : BazaColors.yellow,
-        borderRadius: BorderRadius.circular(20),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(20),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(18, 20, 14, 20),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 30,
-                  backgroundColor: driver
-                      ? Colors.white.withValues(alpha: 0.12)
-                      : Colors.white.withValues(alpha: 0.55),
-                  child: Icon(
-                    driver ? Icons.local_taxi : Icons.hail,
-                    size: 32,
-                    color: driver ? BazaColors.yellow : BazaColors.ink,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          color: fg,
-                          fontSize: 21,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        driver ? 'Conta de motorista' : 'Conta de passageiro',
-                        style: TextStyle(
-                          color: fg.withValues(alpha: 0.75),
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(text, style: TextStyle(color: fg)),
-                    ],
-                  ),
-                ),
-                Icon(Icons.chevron_right, color: fg),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// O tipo de conta escolhido, sempre à vista nos passos seguintes.
 class _RoleBanner extends StatelessWidget {
-  const _RoleBanner({required this.driver, this.onChange});
+  const _RoleBanner({required this.driver, this.onSwitch});
   final bool driver;
-  final VoidCallback? onChange;
+
+  /// Troca para o outro tipo de conta (só no passo do número).
+  final VoidCallback? onSwitch;
 
   @override
   Widget build(BuildContext context) {
     final fg = driver ? Colors.white : BazaColors.ink;
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
         color: driver ? BazaColors.ink : BazaColors.yellow,
         borderRadius: BorderRadius.circular(18),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            driver ? Icons.local_taxi : Icons.hail,
-            size: 30,
-            color: driver ? BazaColors.yellow : BazaColors.ink,
+          Row(
+            children: [
+              Icon(
+                driver ? Icons.local_taxi : Icons.hail,
+                size: 30,
+                color: driver ? BazaColors.yellow : BazaColors.ink,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      driver ? 'Conduza com o Bazá' : 'Vamos bazar?',
+                      style: TextStyle(
+                        color: fg,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      driver
+                          ? 'A entrar como motorista'
+                          : 'A entrar como passageiro',
+                      style: TextStyle(
+                        color: fg.withValues(alpha: 0.8),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          // Linha própria, para caber em qualquer ecrã. Botão com o ícone do
+          // outro tipo: diz o que faz sem ser preciso perceber "trocar".
+          if (onSwitch != null) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 10,
+              runSpacing: 6,
               children: [
                 Text(
-                  driver ? 'Conduza com o Bazá' : 'Vamos bazar?',
-                  style: TextStyle(
-                    color: fg,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                  ),
+                  driver ? 'Vai viajar?' : 'Vai conduzir?',
+                  style: TextStyle(color: fg, fontWeight: FontWeight.w600),
                 ),
-                Text(
-                  driver
-                      ? 'A entrar como motorista'
-                      : 'A entrar como passageiro',
-                  style: TextStyle(
-                    color: fg.withValues(alpha: 0.8),
-                    fontWeight: FontWeight.w600,
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: driver ? BazaColors.yellow : Colors.white,
+                    foregroundColor: BazaColors.ink,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    // O tema dá aos botões a largura toda; aqui fica do tamanho do texto.
+                    minimumSize: const Size(0, 44),
+                  ),
+                  onPressed: onSwitch,
+                  icon: Icon(driver ? Icons.hail : Icons.local_taxi, size: 22),
+                  label: Text(
+                    driver ? 'Sou passageiro' : 'Sou motorista',
+                    style: const TextStyle(fontWeight: FontWeight.w800),
                   ),
                 ),
               ],
             ),
-          ),
-          if (onChange != null)
-            TextButton(
-              style: TextButton.styleFrom(foregroundColor: fg),
-              onPressed: onChange,
-              child: const Text(
-                'Trocar',
-                style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  decoration: TextDecoration.underline,
-                ),
-              ),
-            ),
+          ],
         ],
       ),
     );

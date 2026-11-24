@@ -119,12 +119,7 @@ void main() {
     FlutterSecureStorage.setMockInitialValues({});
     await _pump(tester, Session(), const AuthScreen());
     await tester.pumpAndSettle();
-    // Primeira vez: escolhe-se em grande se vai viajar ou conduzir.
-    expect(find.text('Como vai usar o Bazá?'), findsOneWidget);
-    expect(find.text('Quero viajar'), findsOneWidget);
-    expect(find.text('Quero conduzir'), findsOneWidget);
-    await tester.tap(find.text('Quero viajar'));
-    await tester.pumpAndSettle();
+    // Por defeito, entra-se como passageiro.
     expect(find.text('A entrar como passageiro'), findsOneWidget);
     expect(find.text('Continuar'), findsOneWidget);
     // O login por email foi descontinuado: não há email nem palavra-passe.
@@ -135,11 +130,8 @@ void main() {
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pump();
     expect(find.text('Escreva o seu número de telefone.'), findsOneWidget);
-    // "Trocar" volta à escolha; o tipo escolhido fica à vista e é lembrado.
-    await tester.tap(find.text('Trocar'));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Quero conduzir'));
-    await tester.tap(find.text('Quero conduzir'));
+    // "Sou motorista" troca de uma vez, e a escolha fica guardada.
+    await tester.tap(find.text('Sou motorista'));
     await tester.pumpAndSettle();
     expect(find.text('A entrar como motorista'), findsOneWidget);
     expect(find.text('Conduza com o Bazá'), findsOneWidget);

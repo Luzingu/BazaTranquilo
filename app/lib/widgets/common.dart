@@ -583,10 +583,13 @@ class PriceStepper extends StatelessWidget {
 
 /// Ligações para os Termos de Utilização e a Política de Privacidade.
 class LegalLinks extends StatelessWidget {
-  const LegalLinks({super.key, this.prefix});
+  const LegalLinks({super.key, this.prefix, this.center = false});
 
   /// Frase antes das ligações, ex.: "Ao continuar, aceita os".
   final String? prefix;
+
+  /// Centrado (no rodapé do ecrã de entrada).
+  final bool center;
 
   static Future<void> _open(BuildContext context, String url) async {
     final ok = await launchUrl(
@@ -614,6 +617,7 @@ class LegalLinks extends StatelessWidget {
       ),
     );
     return Wrap(
+      alignment: center ? WrapAlignment.center : WrapAlignment.start,
       crossAxisAlignment: WrapCrossAlignment.center,
       spacing: 6,
       children: [
@@ -761,6 +765,146 @@ class _PasswordFieldState extends State<PasswordField> {
 void checkNewPassword(String password, String confirmation) {
   if (password.length < 6) throw 'A senha deve ter pelo menos 6 caracteres.';
   if (password != confirmation) throw 'As duas senhas não são iguais.';
+}
+
+/// Campo do número de telefone, pensado para quem tem pouca prática com o
+/// telemóvel: ícone de telefone bem visível, indicativo +244 em destaque,
+/// algarismos grandes e uma ajuda que acompanha o que se escreve ("Faltam 3
+/// números") e fica verde, com um visto, quando o número está completo.
+class PhoneField extends StatefulWidget {
+  const PhoneField({
+    super.key,
+    required this.controller,
+    this.label = 'Número de telefone',
+    this.autofocus = false,
+    this.action = TextInputAction.done,
+    this.onSubmitted,
+    this.autofill = false,
+  });
+  final TextEditingController controller;
+  final String label;
+  final bool autofocus;
+  final TextInputAction action;
+  final VoidCallback? onSubmitted;
+
+  /// Sugerir o número deste telemóvel (só no ecrã de entrada).
+  final bool autofill;
+
+  @override
+  State<PhoneField> createState() => _PhoneFieldState();
+}
+
+class _PhoneFieldState extends State<PhoneField> {
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_changed);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_changed);
+    super.dispose();
+  }
+
+  void _changed() => setState(() {});
+
+  @override
+  Widget build(BuildContext context) {
+    final text = widget.controller.text.trim();
+    final international = text.startsWith('+');
+    final digits = text.replaceAll(RegExp(r'\D'), '').length;
+    // Telemóvel angolano: 9 algarismos, começa por 9.
+    final complete =
+        !international &&
+        digits == 9 &&
+        text.replaceAll(RegExp(r'\D'), '').startsWith('9');
+    final wrongStart = !international && digits > 0 && !text.startsWith('9');
+    final String helper;
+    final Color helperColor;
+    if (international) {
+      helper = 'Número com indicativo de outro país.';
+      helperColor = BazaColors.muted;
+    } else if (wrongStart) {
+      helper = 'Os números de telemóvel começam por 9.';
+      helperColor = BazaColors.red;
+    } else if (complete) {
+      helper = 'Número completo.';
+      helperColor = BazaColors.green;
+    } else if (digits == 0) {
+      helper = 'Escreva os 9 números. Começa por 9.';
+      helperColor = BazaColors.muted;
+    } else {
+      final left = 9 - digits;
+      helper = left == 1 ? 'Falta 1 número.' : 'Faltam $left números.';
+      helperColor = BazaColors.muted;
+    }
+    return TextField(
+      controller: widget.controller,
+      autofocus: widget.autofocus,
+      textInputAction: widget.action,
+      onSubmitted: (_) => widget.onSubmitted?.call(),
+      keyboardType: TextInputType.phone,
+      autofillHints: widget.autofill
+          ? const [AutofillHints.telephoneNumber]
+          : null,
+      inputFormatters: const [PhoneInputFormatter()],
+      style: const TextStyle(
+        fontSize: 20,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 1.5,
+      ),
+      decoration: InputDecoration(
+        labelText: widget.label,
+        hintText: '923 456 789',
+        hintStyle: const TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.w400,
+          letterSpacing: 1.5,
+          color: Color(0xFFB0B5BD),
+        ),
+        // Ícone grande e com cor: diz "telefone" a quem não lê bem.
+        prefixIcon: Padding(
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: BazaColors.yellow,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.phone_android,
+              color: BazaColors.ink,
+              size: 24,
+            ),
+          ),
+        ),
+        prefixIconConstraints: const BoxConstraints(
+          minWidth: 60,
+          minHeight: 56,
+        ),
+        prefixText: international ? null : '+244 ',
+        prefixStyle: const TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.w700,
+          color: BazaColors.muted,
+        ),
+        suffixIcon: complete
+            ? const Icon(Icons.check_circle, color: BazaColors.green, size: 28)
+            : null,
+        helperText: helper,
+        helperMaxLines: 2,
+        helperStyle: TextStyle(
+          color: helperColor,
+          fontSize: 14,
+          fontWeight: complete || wrongStart
+              ? FontWeight.w700
+              : FontWeight.w500,
+        ),
+      ),
+    );
+  }
 }
 
 /// Separa o número de telefone de 3 em 3 enquanto se escreve ("923 456 789"),
