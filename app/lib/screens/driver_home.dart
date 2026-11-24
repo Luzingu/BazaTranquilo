@@ -52,6 +52,7 @@ class _DriverViewState extends State<_DriverView> {
 
   Future<void> _cancel(Ride ride) async {
     final confirmed = await showDialog<bool>(
+      barrierDismissible: false,
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Cancelar esta corrida?'),

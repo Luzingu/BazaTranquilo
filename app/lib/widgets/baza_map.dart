@@ -467,6 +467,7 @@ class BazaMapState extends State<BazaMap> with SingleTickerProviderStateMixin {
                 label: 'Créditos do mapa',
                 child: GestureDetector(
                   onTap: () => showDialog<void>(
+                    barrierDismissible: false,
                     context: context,
                     builder: (context) => AlertDialog(
                       title: const Text('Créditos do mapa'),

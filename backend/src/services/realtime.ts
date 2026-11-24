@@ -2,12 +2,17 @@ import type { Server as HttpServer } from 'node:http';
 import { Server } from 'socket.io';
 import { z } from 'zod';
 import { verifyToken } from '../http.js';
-import type { Role } from '../models/accounts.js';
+import { findAccountById, type Role } from '../models/accounts.js';
 import { RideModel } from '../models/Ride.js';
 import { pushEnabled, pushForEvent, pushToUser } from './push.js';
 import { updateDriverLocation } from './rides.js';
 
 let io: Server | undefined;
+
+/** Desliga as ligações em tempo real de uma conta (as sessões dela deixaram de valer). */
+export function dropLiveSessions(userId: string) {
+  io?.in(`user:${userId}`).disconnectSockets(true);
+}
 
 const locationSchema = z.object({
   lat: z.number().min(-90).max(90),
@@ -22,9 +27,17 @@ export function initRealtime(server: HttpServer) {
     const token = socket.handshake.auth?.token;
     const auth = typeof token === 'string' ? verifyToken(token) : null;
     if (!auth) return next(new Error('unauthorized'));
-    socket.data.userId = auth.id;
-    socket.data.role = auth.role;
-    next();
+    // A sessão tem de ser da versão actual da conta (cai quando o dono do número a recupera).
+    findAccountById(auth.role, auth.id)
+      .then((account) => {
+        if (!account || account.deactivatedAt || (account.sessionVersion ?? 0) !== auth.version) {
+          return next(new Error('unauthorized'));
+        }
+        socket.data.userId = auth.id;
+        socket.data.role = auth.role;
+        next();
+      })
+      .catch(() => next(new Error('unauthorized')));
   });
 
   io.on('connection', (socket) => {

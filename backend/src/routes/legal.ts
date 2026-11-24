@@ -12,7 +12,7 @@ import { config } from '../config.js';
 // lançamento. Os números (minutos, cancelamentos) vêm de config.ts, para o
 // texto dizer sempre o que o sistema faz.
 
-const UPDATED = '22 de Novembro de 2026';
+const UPDATED = '24 de Novembro de 2026';
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 function contact() {
@@ -89,10 +89,10 @@ const terms = () => {
 <h2>3. Conta</h2>
 <ul>
 <li>Para usar o Bazá é preciso ter pelo menos 18 anos e capacidade para celebrar contratos.</li>
-<li>A conta é criada com um número de telefone, que é confirmado por um código enviado por SMS, e com uma senha escolhida por si.</li>
+<li>A conta é criada com um número de telefone, que é confirmado por um código enviado por SMS (se o SMS não chegar ao criar a conta, a confirmação é pedida mais tarde), e com uma senha escolhida por si.</li>
 <li>Os dados que indicar têm de ser verdadeiros e estar actualizados.</li>
 <li>A conta é pessoal e não pode ser cedida. Guarde a senha e os códigos em segredo: é responsável pelo que for feito com a sua conta. Se suspeitar de uso indevido, avise-nos de imediato.</li>
-<li>A mesma pessoa pode ter uma conta de Passageiro e uma conta de Motorista com o mesmo número.</li>
+<li>Cada número de telefone só pode ter um tipo de conta: Passageiro ou Motorista. Para ter as duas, é preciso usar números diferentes.</li>
 </ul>
 
 <h2>4. Pedir e fazer uma Corrida</h2>

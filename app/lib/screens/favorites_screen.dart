@@ -122,6 +122,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
 
   Future<void> _remove(FavoriteDriver f) async {
     final confirmed = await showDialog<bool>(
+      barrierDismissible: false,
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Remover ${f.driver.name} dos preferidos?'),

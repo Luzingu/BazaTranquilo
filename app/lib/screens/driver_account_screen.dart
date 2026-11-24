@@ -56,6 +56,7 @@ class _DriverAccountScreenState extends State<DriverAccountScreen> {
   /// Folha para comunicar um pagamento: mensalidade de [vehicle] ou comissões.
   Future<void> _pay({Map<String, dynamic>? vehicle}) async {
     final sent = await showModalBottomSheet<bool>(
+      isDismissible: false,
       context: context,
       isScrollControlled: true,
       showDragHandle: true,

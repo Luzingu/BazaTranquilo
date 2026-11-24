@@ -164,7 +164,7 @@ Antes da primeira publicação na Play Store:
 - **Definições › Mensalidade por tipo de viatura** (por omissão 0 = gratuito).
 - **Instituições › Postos policiais:** registar os postos (com a posição no mapa e o telefone do posto) e os agentes de cada um, indicados pela Polícia. Marcar o comando provincial de cada província, que recebe os alertas sem resposta.
 - **Intermunicipal:** criar as rotas entre municípios com o preço por passageiro.
-- **Definições › Código por SMS para entrar:** o código por SMS para entrar fica ligado por omissão. Desligado, quem já tem conta entra só com o número e a senha; criar conta exige sempre confirmar o número por SMS (por isso o serviço de SMS tem de estar a funcionar para haver contas novas). Senha esquecida nesse modo: Motoristas / Passageiros › "Repor senha".
+- **Definições › Código por SMS para entrar:** o código por SMS para entrar fica ligado por omissão. Desligado, quem já tem conta entra só com o número e a senha; criar conta pede o código por SMS; se o envio falhar, a conta cria-se na mesma, só com a senha, e fica com o número por confirmar (o app pede o código quando o SMS voltar a funcionar e a pessoa não estiver numa corrida). Em Definições aparece quantas contas estão nessa situação, e nas listas de Motoristas / Passageiros cada uma vem marcada "número por confirmar". Senha esquecida nesse modo: Motoristas / Passageiros › "Repor senha".
 - **Locais:** registar os pontos principais de cada província onde o Bazá opera e nomear utilizadores estrela.
 
 ### Permissões Android do app
@@ -220,3 +220,51 @@ Falta, por esta ordem:
 5. `cd app && flutter build ios --release --dart-define=API_URL=https://<domínio>`, testar num iPhone e enviar pelo Xcode para o TestFlight.
 
 No iPhone, a partilha do som num alerta usa o modo `audio` (não há serviço como no Android); tem de ser testada num aparelho real.
+
+
+## Instalação em bazatranquilo.com — estado em 2026-11-22
+
+Primeira instalação real, no servidor Serve1 da Luzingu (o mesmo do AngoSchool). O que ficou diferente do plano acima:
+
+| Peça | Como ficou |
+|---|---|
+| Pasta | `/var/www/BazaTranquilo` (clone do git; não `/opt/baza`) |
+| Endereço | `https://bazatranquilo.com` — o `www` e o HTTP redireccionam para lá |
+| Proxy HTTPS | Nginx: `/etc/nginx/sites-available/bazatranquilo`. Na raiz serve a página inicial (`site/`), em `/app/` a app web (`app/build/web`) e passa tudo o resto (API, `/painel`, `/termos`, `/acompanhar`, socket.io) para `127.0.0.1:4000` |
+| Certificado | Let's Encrypt por *webroot* (`/var/www/letsencrypt-baza`); renova sozinho e recarrega o Nginx (`/etc/letsencrypt/renewal-hooks/deploy/nginx-recarregar.sh`) |
+| API | serviço `baza` (systemd), utilizador `baza`, `HOST=127.0.0.1` no `.env` para não escutar para fora |
+| Base de dados | **MongoDB do AngoSchool** (porta 27019, replicado para o Serve2), base `baza`, utilizador `baza` próprio (decisão do dono). A base de teste é `baza_teste`, com o mesmo utilizador |
+| Mapas | `mapas/.env` com `MAPA_PORT=8088` (a 8080 é do Nginx neste servidor); `TILE_UPSTREAM` aponta para a 8088 |
+| Administrador do painel | `admin@bazatranquilo.com`; a senha inicial está em `ADMIN_PASSWORD` no `backend/.env` — trocar no painel |
+| Cópia do `.env` original | `/root/baza-env-original-20261122.bak` (o que veio do computador de desenvolvimento) |
+
+Comandos do dia-a-dia neste servidor:
+
+```sh
+export JAVA_HOME=/opt/jdk-17.0.2 ANDROID_HOME=/opt/android-sdk PATH=/opt/flutter/bin:$PATH
+
+# API: depois de mudar o código
+cd /var/www/BazaTranquilo/backend && npm run build && systemctl restart baza
+journalctl -u baza -f
+
+# App web (fica em /app/): basta compilar, o Nginx lê os ficheiros do disco
+cd /var/www/BazaTranquilo/app && flutter build web --release --base-href /app/ --dart-define=API_URL=https://bazatranquilo.com
+
+# APK assinado com a chave de loja
+flutter build apk --release --dart-define=API_URL=https://bazatranquilo.com
+
+# Testes da API (o MongoDB daqui pede senha)
+cd /var/www/BazaTranquilo/backend && MONGODB_TEST_URI="$(grep '^MONGODB_TEST_URI=' .env | cut -d= -f2-)" npm run test:e2e
+```
+
+Página inicial: `site/index.html` é um ficheiro só (HTML, CSS e JavaScript), sem compilação — edita-se e fica no ar (o Nginx pode demorar até 1 minuto a largar a versão antiga). É a página que os motores de busca lêem: `site/robots.txt`, `site/sitemap.xml`, imagem de partilha `site/og.png` e dados estruturados (organização, aplicação e perguntas frequentes) no próprio HTML. As perguntas frequentes estão escritas duas vezes (no texto e nos dados estruturados): mudar nos dois sítios.
+
+Por fazer nesta instalação:
+
+- **Regra "um número, um só tipo de conta" (2026-11-24):** logo **depois** de reiniciar a API com esta versão (nunca antes — o servidor antigo criaria uma conta nova ao passageiro desactivado), desactivar o lado passageiro das duplas antigas. Primeiro ver, depois aplicar:
+  `cd /var/www/BazaTranquilo/backend && npx tsx scripts/desactivar-passageiros-com-numero-de-motorista.ts` e depois o mesmo com `--aplicar`. A 24/11 eram 6 (todos os motoristas). Nada se apaga: o número passa para `formerPhone`, as corridas ficam, e o painel mostra a conta como "Desactivada · número de motorista". Correr de novo não faz mal (salta quem já está tratado e quem estiver numa corrida).
+- Registar o domínio na Google Search Console e enviar o `sitemap.xml`.
+
+- Cópia de segurança da base `baza` (o `/root/backup_mega.sh` só leva as bases do AngoSchool).
+- Servidor TURN, conta de SMS e caixa de e-mail próprias, `LEGAL_ENTITY`/`SUPPORT_*` e `COMMISSION_PAY_INFO` (ver secções 4 e 8).
+- O *lint* das versões release está desligado em `app/android/build.gradle.kts` porque rebenta com o JDK 17; com JDK 21 pode voltar a ligar-se.

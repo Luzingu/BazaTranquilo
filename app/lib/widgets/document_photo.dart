@@ -24,6 +24,7 @@ Future<PickedPhoto?> pickDocumentPhoto(
 }) async {
   if (pickPhotoOverride != null) return pickPhotoOverride!();
   final source = await showModalBottomSheet<ImageSource>(
+    isDismissible: false,
     context: context,
     backgroundColor: Colors.white,
     showDragHandle: true,

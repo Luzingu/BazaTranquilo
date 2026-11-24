@@ -393,6 +393,9 @@ export async function createRide(
   let company: Awaited<ReturnType<typeof authorizeCompanyRide>> | null = null;
   if (input.paymentMethod === 'corporate') {
     if (negotiated || fare <= 0) throw new HttpError(400, 'Os serviços de preço a combinar não podem ser pagos por conta da empresa.');
+    if (passenger.phoneVerified === false) {
+      throw new HttpError(403, 'Confirme o seu número de telefone para viajar por conta da empresa.');
+    }
     company = await authorizeCompanyRide(passenger.phone, fare);
   }
   const ride = await RideModel.create({

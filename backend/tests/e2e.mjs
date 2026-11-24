@@ -7,8 +7,16 @@ import mongoose from 'mongoose';
 import { io as connect } from 'socket.io-client';
 
 const PORT = 4100;
-const DB = 'mongodb://127.0.0.1:27017/baza_teste';
+// Num servidor em que o MongoDB pede utilizador e senha, indicar o endereço em
+// MONGODB_TEST_URI. A base tem de se chamar "baza_teste": é apagada pelo teste.
+const DB = process.env.MONGODB_TEST_URI ?? 'mongodb://127.0.0.1:27017/baza_teste';
+if (!/^mongodb(\+srv)?:\/\/[^/]+\/baza_teste(\?|$)/.test(DB)) {
+  console.error('MONGODB_TEST_URI tem de apontar para a base "baza_teste".');
+  process.exit(1);
+}
 const B = `http://localhost:${PORT}`;
+// Segredo próprio dos testes (o servidor de teste não usa o do .env).
+const TEST_JWT_SECRET = 'segredo-so-dos-testes-e2e';
 const P = '/painel/api';
 
 let passed = 0;
@@ -75,8 +83,13 @@ async function run() {
   group('Contas');
   const pas = await otp('923000001', 'passenger');
   check('passageiro entra por telefone', pas.s === 200 && pas.user.role === 'passenger');
-  const same = await otp('923000001', 'driver');
-  check('o mesmo telefone cria outra conta de motorista', same.user.role === 'driver' && same.user.id !== pas.user.id);
+  // Um número, um só tipo de conta: o número do passageiro não serve para motorista.
+  let dup = await call('POST', '/auth/start', null, { phone: '923000001', role: 'driver' });
+  check('o número do passageiro não cria conta de motorista', dup.s === 409 && dup.otherRole === 'passenger' && !dup.devCode);
+  dup = await call('POST', '/auth/otp/request', null, { phone: '923000001', role: 'driver' });
+  check('nem pelo pedido de código antigo', dup.s === 409 && dup.otherRole === 'passenger');
+  const same = await otp('923000018', 'driver');
+  check('outro número cria a conta de motorista', same.user?.role === 'driver');
   check('código errado é recusado', (await call('POST', '/auth/otp/verify', null, { phone: '923000001', code: '000000', role: 'passenger' })).s === 400);
   // O login por email foi descontinuado: só telefone.
   for (const path of ['/auth/register', '/auth/login']) {
@@ -805,6 +818,99 @@ async function run() {
     check('o código SMS volta a funcionar', (await call('POST', '/auth/otp/request', null, { phone: '923000779', role: 'passenger' })).s === 200);
   }
 
+  group('Criar conta quando o SMS falha');
+  {
+    let r = await call('POST', '/auth/start', null, { phone: '923000790', role: 'passenger' });
+    check('o SMS falha: a conta nova avança na mesma', r.method === 'signup' && r.reason === 'sms_failed' && typeof r.signupTicket === 'string' && !r.devCode);
+    const ticket = r.signupTicket;
+    check('bilhete inválido não cria conta', (await call('POST', '/auth/signup', null, { ticket: 'x'.repeat(40), password: 'segredo1' })).s === 400);
+    check('a senha continua obrigatória', (await call('POST', '/auth/signup', null, { ticket, password: '12' })).s === 400);
+    r = await call('POST', '/auth/signup', null, { ticket, password: 'segredo1' });
+    check('cria a conta com a senha e o número por confirmar', r.s === 200 && r.isNew === true && r.user.hasPassword === true && r.user.phoneVerified === false);
+    const u = r;
+    check('o mesmo bilhete não cria outra conta', (await call('POST', '/auth/signup', null, { ticket, password: 'segredo1' })).s === 409);
+    check('o bilhete não serve de sessão', (await call('GET', '/me', ticket)).s === 401);
+    r = await call('GET', '/me/phone-confirmation', u.token);
+    check('com o SMS em baixo, o app ainda não pede o código', r.verified === false && r.canAskNow === false && r.reason === 'sms_down');
+    await otp('923000791', 'passenger'); // um SMS sai bem: o envio voltou a funcionar
+    r = await call('GET', '/me/phone-confirmation', u.token);
+    check('com o SMS a funcionar, é boa altura para pedir', r.canAskNow === true && r.phone === '+244923000790');
+    const ride = (await call('POST', '/rides', u.token, { ...trip, category: 'economy' })).ride;
+    r = await call('GET', '/me/phone-confirmation', u.token);
+    check('numa corrida, não se pede', r.canAskNow === false && r.reason === 'in_ride');
+    check('nem se envia o código', (await call('POST', '/me/phone-confirmation/request', u.token)).s === 409);
+    await call('POST', `/rides/${ride?.id}/cancel`, u.token);
+    r = await call('POST', '/me/phone-confirmation/request', u.token);
+    check('fora da corrida, envia o código para o próprio número', r.s === 200 && r.phone === '+244923000790' && /^\d{6}$/.test(r.devCode));
+    check('código errado não confirma', (await call('POST', '/me/phone-confirmation/verify', u.token, { code: r.devCode === '000000' ? '111111' : '000000' })).s === 400);
+    r = await call('POST', '/me/phone-confirmation/verify', u.token, { code: r.devCode });
+    check('o número fica confirmado', r.s === 200 && r.user.phoneVerified === true);
+    check('e o app deixa de perguntar', (await call('GET', '/me/phone-confirmation', u.token)).verified === true);
+    check('a senha continua a servir', (await call('POST', '/auth/password/login', null, { phone: '923000790', role: 'passenger', password: 'segredo1' })).s === 200);
+
+    // Alguém cria conta com o número de outra pessoa enquanto o SMS falha; o dono recupera-a.
+    r = await call('POST', '/auth/start', null, { phone: '923000792', role: 'passenger' });
+    const intruso = await call('POST', '/auth/signup', null, { ticket: r.signupTicket, password: 'intruso1' });
+    check('conta criada com o número por confirmar', intruso.user?.phoneVerified === false);
+    const a = await call('GET', `${P}/admin/acesso`, admin.token);
+    check('o painel conta os números por confirmar', a.passengers.unverified >= 1);
+    const lista = await call('GET', `${P}/admin/passageiros?q=923000792`, admin.token);
+    check('e marca-os na lista de passageiros', lista.passengers[0]?.phoneVerified === false);
+    r = await call('POST', '/auth/start', null, { phone: '923000792', role: 'passenger' });
+    check('com o SMS a funcionar, o número recebe o código', r.method === 'otp' && /^\d{6}$/.test(r.devCode));
+    r = await call('POST', '/auth/otp/verify', null, { phone: '923000792', role: 'passenger', code: r.devCode });
+    check('quem recebe o código recupera a conta e escolhe nova senha', r.s === 200 && r.phoneRecovered === true && r.user.phoneVerified === true && r.user.hasPassword === false);
+    check('a sessão de quem a criou cai', (await call('GET', '/me', intruso.token)).s === 401);
+    check('e a senha dele deixa de servir', (await call('POST', '/auth/password/login', null, { phone: '923000792', role: 'passenger', password: 'intruso1' })).s === 401);
+    check('a sessão do dono funciona', (await call('GET', '/me', r.token)).s === 200);
+
+    // Número por confirmar não viaja por conta da empresa (o número pode não ser dele).
+    const cid = (await call('POST', `${P}/admin/empresas`, admin.token, { name: 'Banco Mussulo', nif: '5417999002', contactName: 'Sr. Paulo', phone: '923000795', email: '', monthlyLimit: 0 })).id;
+    await call('POST', `${P}/admin/empresas/${cid}/colaboradores`, admin.token, { name: 'Ana', phone: '923000794' });
+    r = await call('POST', '/auth/start', null, { phone: '923000794', role: 'passenger' });
+    const col = await call('POST', '/auth/signup', null, { ticket: r.signupTicket, password: 'segredo1' });
+    r = await call('POST', '/rides/estimate', col.token, trip);
+    check('o colaborador por confirmar não vê a conta da empresa', !r.paymentMethods.includes('corporate') && r.company === null && r.companyLocked === true);
+    check('nem pode pedir por conta dela', (await call('POST', '/rides', col.token, { ...trip, category: 'economy', paymentMethod: 'corporate' })).s === 403);
+  }
+
+  group('Um número, um só tipo de conta');
+  {
+    const p1 = await otp('923000801', 'passenger');
+    const d1 = await otp('923000802', 'driver');
+    let r = await call('POST', '/auth/start', null, { phone: '923000801', role: 'driver' });
+    check('número de passageiro não entra como motorista, e o app sabe qual é', r.s === 409 && r.otherRole === 'passenger' && /passageiro/.test(r.error));
+    r = await call('POST', '/auth/start', null, { phone: '923000802', role: 'passenger' });
+    check('número de motorista não entra como passageiro', r.s === 409 && r.otherRole === 'driver' && !r.devCode);
+    check('com o tipo certo, entra', (await call('POST', '/auth/start', null, { phone: '923000802', role: 'driver' })).method === 'otp');
+    check('mudar para um número que é de outro tipo de conta é recusado', (await call('POST', '/me/phone/request', d1.token, { phone: '923000801' })).s === 409);
+    r = await call('POST', `${P}/frota/motoristas`, fleet.token, { name: 'Motorista Repetido', phone: '923000801' });
+    check('a frota não regista como motorista um número de passageiro', r.s === 409 && /passageiro/.test(r.error));
+
+    // Duplas antigas (de antes da regra): o script desactiva o lado passageiro, sem apagar.
+    const { insertedId } = await mongoose.connection.db.collection('passageiros').insertOne({ name: 'Dupla Antiga', phone: '+244923000802', walletBalance: 0, ratingSum: 0, ratingCount: 0, pushTokens: [], sessionVersion: 0, createdAt: new Date() });
+    const legacyToken = (await import('jsonwebtoken')).default.sign({ sub: String(insertedId), role: 'passenger' }, TEST_JWT_SECRET, { expiresIn: '1h' });
+    const before = await call('GET', '/me', legacyToken);
+    const script = (args) => new Promise((resolve) => {
+      const child = spawn('npx', ['tsx', 'scripts/desactivar-passageiros-com-numero-de-motorista.ts', ...args], { env: { ...process.env, MONGODB_URI: DB } });
+      let out = '';
+      child.stdout.on('data', (d) => (out += d));
+      child.stderr.on('data', (d) => (out += d));
+      child.on('close', () => resolve(out));
+    });
+    let out = await script([]);
+    check('o script, sem --aplicar, só mostra', /1 passageiro\(s\) com número de motorista/.test(out) && (await mongoose.connection.db.collection('passageiros').findOne({ _id: insertedId })).phone === '+244923000802', out.trim());
+    out = await script(['--aplicar']);
+    const after = await mongoose.connection.db.collection('passageiros').findOne({ _id: insertedId });
+    check('com --aplicar, desactiva o passageiro e guarda o número antigo', /1 conta\(s\) desactivada\(s\)/.test(out) && !after.phone && after.formerPhone === '+244923000802' && after.deactivatedAt && after.name === 'Dupla Antiga', out.trim());
+    check('antes, a dupla antiga entrava; depois, a sessão dela cai', before.s === 200 && (await call('GET', '/me', legacyToken)).s === 401);
+    check('o número fica só do motorista', (await call('POST', '/auth/start', null, { phone: '923000802', role: 'passenger' })).otherRole === 'driver' && (await call('GET', '/me', d1.token)).s === 200);
+    const lista = await call('GET', `${P}/admin/passageiros?q=Dupla`, admin.token);
+    check('o painel mostra a conta como desactivada', lista.passengers[0]?.deactivated === true && lista.passengers[0].phone === '+244923000802');
+    check('correr o script outra vez não muda nada', /0 passageiro\(s\)/.test(await script(['--aplicar'])));
+    void p1;
+  }
+
   group('Páginas servidas');
   for (const [path, type] of [['/painel/', 'text/html'], ['/painel/painel.js', 'text/javascript'], ['/painel/fundo.svg', 'image/svg+xml'], [`/acompanhar/${token}`, 'text/html']]) {
     const page = await fetch(B + path);
@@ -814,11 +920,18 @@ async function run() {
 }
 
 // ── Arranque e limpeza ──────────────────────────────────────────────────────
+if (await fetch(`${B}/health`).then(() => true).catch(() => false)) {
+  console.error(`A porta ${PORT} já está ocupada (um teste anterior ficou a correr?). Termine esse processo e repita.`);
+  process.exit(1);
+}
 await mongoose.connect(DB);
 await mongoose.connection.dropDatabase();
 const server = spawn('npx', ['tsx', 'src/index.ts'], {
-  env: { ...process.env, PORT: String(PORT), MONGODB_URI: DB, NODE_ENV: 'development', ADMIN_EMAIL: '', ADMIN_PASSWORD: '', WALLET_ENABLED: 'false', AUTO_APPROVE_DOCUMENTS: 'true', SMS_PROVIDER: 'console', TELCOSMS_API_KEY: '', MAIL_TRANSPORT: 'console', TILE_UPSTREAM: '', FIREBASE_KEY_FILE: '' },
+  env: { ...process.env, PORT: String(PORT), MONGODB_URI: DB, JWT_SECRET: TEST_JWT_SECRET, NODE_ENV: 'development', ADMIN_EMAIL: '', ADMIN_PASSWORD: '', WALLET_ENABLED: 'false', AUTO_APPROVE_DOCUMENTS: 'true', SMS_PROVIDER: 'console', SMS_FAIL_NUMBERS: '+244923000790,+244923000792,+244923000794', TELCOSMS_API_KEY: '', MAIL_TRANSPORT: 'console', TILE_UPSTREAM: '', FIREBASE_KEY_FILE: '' },
   stdio: ['ignore', 'pipe', 'pipe'],
+  // Grupo de processos próprio: no fim mata-se o grupo todo (o npx lança o
+  // servidor noutro processo, que sobrevivia e era apanhado pela corrida seguinte).
+  detached: true,
 });
 let log = '';
 server.stdout.on('data', (d) => (log += d));
@@ -831,9 +944,13 @@ try {
   }
   await run();
 } catch (err) {
-  failures.push(`erro inesperado: ${err.stack ?? err}`);
+  failures.push(`erro inesperado: ${err.stack ?? err}\n--- registo do servidor ---\n${log.slice(-3000)}`);
 } finally {
-  server.kill();
+  try {
+    process.kill(-server.pid, 'SIGTERM');
+  } catch {
+    server.kill();
+  }
   await mongoose.connection.dropDatabase();
   await mongoose.disconnect();
 }

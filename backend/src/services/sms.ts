@@ -23,6 +23,7 @@ export function toTelcoNumber(phone: string): string | null {
 const MIN_INTERVAL_MS = 60_000;
 const MAX_PER_HOUR = 5;
 const sentAt = new Map<string, number[]>();
+const simulatedFailures = new Set<string>();
 
 function checkQuota(number: string) {
   const now = Date.now();
@@ -72,8 +73,19 @@ async function sendViaTelco(number: string, text: string): Promise<boolean> {
  */
 export async function sendSms(phone: string, text: string) {
   if (!smsIsReal()) {
-    if (!config.isDev) throw new HttpError(503, 'Envio de SMS não configurado.');
+    if (!config.isDev) {
+      health.lastFailureAt = Date.now();
+      throw new HttpError(503, 'Envio de SMS não configurado.');
+    }
+    // Só nos testes: o primeiro envio a estes números falha (o SMS "cai" e depois
+    // volta), para ensaiar o que acontece quando o SMS não sai.
+    if (config.smsFailNumbers.includes(phone) && !simulatedFailures.has(phone)) {
+      simulatedFailures.add(phone);
+      health.lastFailureAt = Date.now();
+      throw new HttpError(502, 'Não foi possível enviar o SMS. Tente de novo dentro de momentos.');
+    }
     console.log(`[SMS simulado → ${phone}] ${text}`);
+    health.lastSuccessAt = Date.now();
     return;
   }
   const number = toTelcoNumber(phone);
@@ -82,8 +94,39 @@ export async function sendSms(phone: string, text: string) {
   if (!(await sendViaTelco(number, text))) {
     // Não conta para o limite um SMS que não saiu.
     sentAt.get(number)?.pop();
+    health.lastFailureAt = Date.now();
     throw new HttpError(502, 'Não foi possível enviar o SMS. Tente de novo dentro de momentos.');
   }
+  health.lastSuccessAt = Date.now();
+}
+
+// ── Estado do envio de SMS ──────────────────────────────────────────────────
+// Serve para decidir quando pedir a confirmação do número a quem criou a conta
+// sem o SMS chegar: só se pede quando há boas razões para o SMS sair agora.
+
+/** Depois de uma falha, espera-se este tempo (ou um envio bem-sucedido) até voltar a confiar. */
+const FAILURE_COOLDOWN_MS = 10 * 60_000;
+const health = { lastFailureAt: 0, lastSuccessAt: 0 };
+
+/** Regista a falha de um envio (para testes e para quem chama a TelcoSMS por outra via). */
+export const noteSmsFailure = () => {
+  health.lastFailureAt = Date.now();
+};
+
+/**
+ * Se vale a pena enviar um SMS agora: o envio está configurado, a última falha
+ * foi há mais de 10 minutos (ou houve um envio bem-sucedido depois dela) e a
+ * conta da TelcoSMS tem saldo e plano válido.
+ */
+export async function smsLooksHealthy(): Promise<boolean> {
+  if (!smsIsReal() && !config.isDev) return false;
+  const failedRecently =
+    health.lastFailureAt > health.lastSuccessAt && Date.now() - health.lastFailureAt < FAILURE_COOLDOWN_MS;
+  if (failedRecently) return false;
+  if (!smsIsReal()) return true;
+  const balance = await smsBalance();
+  // Sem resposta do saldo não se conclui nada: só um saldo esgotado ou plano caducado trava.
+  return !balance || (balance.available > 0 && !balance.planExpired);
 }
 
 /** Saldo de SMS na TelcoSMS, para o painel do administrador. */

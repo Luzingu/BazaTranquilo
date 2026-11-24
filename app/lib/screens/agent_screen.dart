@@ -113,6 +113,7 @@ class _AgentHomeState extends State<AgentHome> {
 
   Future<void> _logout() async {
     final sure = await showDialog<bool>(
+      barrierDismissible: false,
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Sair?'),
@@ -463,6 +464,7 @@ class _AgentAlertScreenState extends State<AgentAlertScreen> {
   Future<void> _close() async {
     final note = TextEditingController();
     final done = await showModalBottomSheet<bool>(
+      isDismissible: false,
       context: context,
       isScrollControlled: true,
       showDragHandle: true,

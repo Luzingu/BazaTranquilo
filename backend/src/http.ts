@@ -17,6 +17,8 @@ export class HttpError extends Error {
   constructor(
     public status: number,
     message: string,
+    /** Campos a juntar à resposta, para o app decidir o que fazer (ex.: `otherRole`). */
+    public extra?: Record<string, unknown>,
   ) {
     super(message);
   }
@@ -44,16 +46,17 @@ declare global {
   }
 }
 
-export function signToken(role: Role, id: string) {
-  return jwt.sign({ sub: id, role }, config.jwtSecret, { expiresIn: '30d' });
+/** `version`: a `sessionVersion` da conta (0 nas contas que nunca foram recuperadas). */
+export function signToken(role: Role, id: string, version = 0) {
+  return jwt.sign({ sub: id, role, ...(version ? { v: version } : {}) }, config.jwtSecret, { expiresIn: '30d' });
 }
 
-export function verifyToken(token: string): { id: string; role: Role } | null {
+export function verifyToken(token: string): { id: string; role: Role; version: number } | null {
   try {
     const p = jwt.verify(token, config.jwtSecret);
     if (typeof p !== 'object' || typeof p.sub !== 'string') return null;
     if (p.role !== 'passenger' && p.role !== 'driver') return null;
-    return { id: p.sub, role: p.role };
+    return { id: p.sub, role: p.role, version: typeof p.v === 'number' ? p.v : 0 };
   } catch {
     return null;
   }
@@ -64,6 +67,10 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
   const auth = header.startsWith('Bearer ') ? verifyToken(header.slice(7)) : null;
   const account = auth ? await findAccountById(auth.role, auth.id) : null;
   if (!auth || !account) throw new HttpError(401, 'Sessão inválida. Entre novamente.');
+  // O dono do número confirmou-o por SMS e recuperou a conta: as sessões antigas caem.
+  if ((account.sessionVersion ?? 0) !== auth.version || account.deactivatedAt) {
+    throw new HttpError(401, 'Sessão inválida. Entre novamente.');
+  }
   req.role = auth.role;
   req.account = account;
   if (auth.role === 'driver') {
@@ -96,7 +103,7 @@ export function requireCompleteDriver(req: Request, _res: Response, next: NextFu
 
 export function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction) {
   if (err instanceof HttpError) {
-    res.status(err.status).json({ error: err.message });
+    res.status(err.status).json({ ...err.extra, error: err.message });
     return;
   }
   if (err instanceof GarageError) {

@@ -135,6 +135,7 @@ class _IntercityScreenState extends State<IntercityScreen> {
 
   Future<void> _publish() async {
     final done = await showModalBottomSheet<bool>(
+      isDismissible: false,
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
@@ -146,6 +147,7 @@ class _IntercityScreenState extends State<IntercityScreen> {
 
   Future<void> _book(_Json trip) async {
     final done = await showModalBottomSheet<bool>(
+      isDismissible: false,
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
@@ -156,6 +158,7 @@ class _IntercityScreenState extends State<IntercityScreen> {
 
   Future<bool> _confirm(String title, String text, String action) async =>
       await showDialog<bool>(
+        barrierDismissible: false,
         context: context,
         builder: (context) => AlertDialog(
           title: Text(title),

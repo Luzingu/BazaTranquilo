@@ -103,6 +103,6 @@ await ensureFleetUsers();
 // Alertas de perigo que nenhum agente assumiu sobem para o comando provincial.
 setInterval(() => escalateStaleAlerts().catch((err) => console.error(err)), 30_000).unref();
 setInterval(() => purgeOldAudio().catch((err) => console.error(err)), 3600_000).unref();
-server.listen(config.port, () => {
+server.listen(config.port, config.host, () => {
   console.log(`Bazá API em http://localhost:${config.port} (${config.isDev ? 'desenvolvimento' : 'produção'})`);
 });

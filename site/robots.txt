@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /painel
+Disallow: /acompanhar/
+Disallow: /app/
+Disallow: /baixar/
+
+Sitemap: https://bazatranquilo.com/sitemap.xml

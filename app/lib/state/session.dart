@@ -129,8 +129,8 @@ class Session extends ChangeNotifier {
     await init();
   }
 
-  // `role` é 'passenger' ou 'driver': o mesmo telefone pode ter as duas
-  // contas, por isso é preciso dizer em qual se está a entrar.
+  // `role` é 'passenger' ou 'driver': cada número só tem um tipo de conta, e
+  // o servidor recusa-o no outro tipo (o ecrã de entrada oferece a troca).
 
   /// Pede o código SMS. Em desenvolvimento a API devolve o código.
   Future<String?> requestOtp(String role, String phone) async {
@@ -176,6 +176,28 @@ class Session extends ChangeNotifier {
     }),
   );
 
+  /// Cria a conta quando o SMS falhou: o servidor deu um bilhete em
+  /// `/auth/start` (`method: signup`). O número fica por confirmar.
+  Future<void> signupWithoutCode(String ticket, String password) async =>
+      _signedIn(
+        await api.post('/auth/signup', {
+          'ticket': ticket,
+          'password': password,
+        }),
+      );
+
+  /// A conta tinha o número por confirmar e acabou de ser confirmado por SMS
+  /// no ecrã de entrada: por segurança, escolhe-se uma senha nova.
+  bool phoneRecovered = false;
+
+  /// Confirma o número da própria conta com o código SMS.
+  Future<void> confirmOwnPhone(String code) async {
+    final res = await api.post('/me/phone-confirmation/verify', {
+      'code': code,
+    });
+    setUser(User.fromJson(res['user'] as Map<String, dynamic>));
+  }
+
   /// Define a senha (conta nova) ou muda-a (com a [current]).
   Future<void> setPassword(String password, {String? current}) async {
     final res = await api.putJson('/me/password', {
@@ -195,6 +217,7 @@ class Session extends ChangeNotifier {
     }
     api.token = res['token'] as String;
     user = User.fromJson(res['user'] as Map<String, dynamic>);
+    phoneRecovered = res['phoneRecovered'] == true;
     await _storage.write(key: 'token', value: api.token);
     _connect();
     _registerPush();

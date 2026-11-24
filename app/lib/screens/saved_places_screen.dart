@@ -58,6 +58,7 @@ Future<List<SavedPlace>?> addSavedPlace(
 }) async {
   final api = context.read<Session>().api;
   final result = await showModalBottomSheet<Object>(
+    isDismissible: false,
     context: context,
     backgroundColor: Colors.white,
     showDragHandle: true,
@@ -303,6 +304,7 @@ class _SaveHereSheetState extends State<_SaveHereSheet> {
 Future<String?> _askLabel(BuildContext context, {String initial = ''}) {
   final controller = TextEditingController(text: initial);
   return showDialog<String>(
+    barrierDismissible: false,
     context: context,
     builder: (context) => AlertDialog(
       title: const Text('Nome do local'),
@@ -379,6 +381,7 @@ class _SavedPlacesScreenState extends State<SavedPlacesScreen> {
   Future<void> _remove(SavedPlace p) async {
     final api = context.read<Session>().api;
     final confirmed = await showDialog<bool>(
+      barrierDismissible: false,
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Remover "${p.label}"?'),

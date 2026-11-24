@@ -183,6 +183,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   void _receipt(Ride ride) {
     final text = _receiptText(ride);
     showModalBottomSheet<void>(
+      isDismissible: false,
       context: context,
       showDragHandle: true,
       isScrollControlled: true,

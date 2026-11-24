@@ -5,6 +5,7 @@ App de táxi para Angola (nome completo "Bazá Tranquilo", lema "Bazá com Segur
 - `backend/` — API Node.js + TypeScript + Express + MongoDB (também serve o painel web, as páginas legais e a partilha de viagem)
 - `app/` — app Flutter (Android, web; iPhone ainda não compilado)
 - `mapas/` — mapas próprios em Docker (imagens do mapa, rotas, pesquisa de locais)
+- `site/` — página inicial pública (`https://bazatranquilo.com/`), um só `index.html` estático; é a que os motores de busca lêem. Só afirmar nela o que o app faz de facto (sem preços, contactos ou cidades inventados)
 - `README.md` — o que cada parte faz e como correr em desenvolvimento
 - `PRODUCAO.md` — guia completo para pôr em produção (**fonte de verdade; manter actualizado**)
 
@@ -25,7 +26,15 @@ App de táxi para Angola (nome completo "Bazá Tranquilo", lema "Bazá com Segur
 
 ## Entrada no app (decidido pelo utilizador)
 
-- Entrar: o utilizador escreve só o número; o servidor decide se pede o código SMS ou a senha, conforme o painel (Definições). No primeiro ecrã NÃO há botão "entrar com senha"; no ecrã do código, quem tem senha pode optar por ela ("Não tem o telefone consigo?"), e a senha é pedida automaticamente quando o código está desligado, o envio do SMS falha ou o código não chega. Criar conta: o número é SEMPRE confirmado por SMS e só depois se define a senha (obrigatória). O login por email continua descontinuado.
+- Entrar: o utilizador escreve só o número; o servidor decide se pede o código SMS ou a senha, conforme o painel (Definições). No primeiro ecrã NÃO há botão "entrar com senha"; no ecrã do código, quem tem senha pode optar por ela ("Não tem o telefone consigo?"), e a senha é pedida automaticamente quando o código está desligado, o envio do SMS falha ou o código não chega. Criar conta: o número é confirmado por SMS e só depois se define a senha (obrigatória). O login por email continua descontinuado.
+- **Se o SMS falhar ao criar a conta, a pessoa avança na mesma** (decidido pelo utilizador, 2026-11-24): o servidor dá um bilhete de 15 min (`/auth/start` → `method: signup`), a pessoa escolhe a senha (`POST /auth/signup`) e a conta fica com `phoneVerified: false`. O app pede a confirmação mais tarde (`app/lib/widgets/phone_confirm.dart`), **só quando o SMS está a funcionar** (`smsLooksHealthy()`: sem falha nos últimos 10 min e com saldo na TelcoSMS) **e a pessoa não está numa corrida** (nem, sendo motorista, online); "Agora não" adia 2 h, 12 h e depois 1 dia; há também um aviso "Número por confirmar" no menu e em "Os meus dados". Só conta como falha um erro do servidor ou da operadora (5xx), não o limite de envios nem um número não angolano.
+- Até confirmar, a conta **não viaja por conta de empresa**. Quem confirmar depois o número por SMS no ecrã de entrada é o dono: a conta passa a confirmada, as sessões antigas caem (`sessionVersion`) e a senha volta a ser definida.
+
+## Um número, um só tipo de conta (decidido pelo utilizador, 2026-11-24)
+
+- O mesmo telefone **não pode** ser de um passageiro e de um motorista. O servidor verifica em todos os sítios onde se cria conta ou se muda de número (`assertPhoneFreeForRole` em `backend/src/models/accounts.ts`: `/auth/start`, `/auth/otp/*`, `/auth/signup`, mudar telefone, frota a registar motorista) e responde `409` com `otherRole`.
+- No ecrã de entrada, primeiro escolhe-se em grande "Quero viajar" (cartão amarelo) ou "Quero conduzir" (cartão escuro); o app lembra-se da escolha neste aparelho (`lastRole`) e o tipo fica sempre à vista num cartão da mesma cor, com "Trocar". Se o número for do outro tipo, o app pergunta "Este número é de motorista — Entrar como motorista?" antes de enviar qualquer SMS.
+- Duplas antigas: fica a conta de motorista; a de passageiro é **desactivada, sem apagar** (`deactivatedAt`, telefone em `formerPhone`), com `backend/scripts/desactivar-passageiros-com-numero-de-motorista.ts --aplicar` (ver `PRODUCAO.md`). Conta desactivada não entra (sessões e ligações em tempo real caem).
 
 ## Regras
 
@@ -51,9 +60,26 @@ Detalhes, comandos e tabelas em `PRODUCAO.md`. A instalação num servidor real 
 4. **HTTPS:** proxy (Caddy ou Nginx) à frente da porta 4000, com WebSocket; fechar as restantes portas. Sem HTTPS o app não liga.
 5. **Push:** `app/android/app/google-services.json` no projecto e a chave da conta de serviço do Firebase em `backend/firebase-chave.json`.
 6. **App:** `flutter build appbundle --release --dart-define=API_URL=https://<domínio>`. A versão *release* já é assinada com a chave de loja do Bazá (`app/android/key.properties`). Antes da Play Store: subir a versão, indicar os endereços `/termos` e `/privacidade`.
-7. **Painel:** em Definições, a percentagem de comissão das corridas, a comissão intermunicipal e a mensalidade por tipo de viatura; em Intermunicipal, as rotas com o preço por passageiro. Em "Definições" liga-se ou desliga-se o código SMS para entrar (criar conta pede sempre o código).
+7. **Painel:** em Definições, a percentagem de comissão das corridas, a comissão intermunicipal e a mensalidade por tipo de viatura; em Intermunicipal, as rotas com o preço por passageiro. Em "Definições" liga-se ou desliga-se o código SMS para entrar (criar conta pede sempre o código; se o SMS falhar, a conta cria-se com o número por confirmar).
 8. **Verificar:** `GET /health`, `GET /map/config` deve dar `{"ownTiles":true}`, entrar no painel em `/painel`.
 9. **Manutenção:** cópia diária com `mongodump`, guardada fora do servidor.
+
+## Desenho do app (decidido pelo utilizador, 2026-11-22 — os mesmos padrões da app AngoSchool)
+
+- **Computador:** em ecrãs com 900 px ou mais, o app inteiro aparece numa janela centrada de 460 px (`app/lib/widgets/desktop_frame.dart`, ligada em `MaterialApp.builder`), com o painel da marca à esquerda a partir de 1100 px. Os ecrãs continuam a ser os do telemóvel: não desenhar variantes largas ecrã a ecrã.
+- **Nenhuma janela fecha ao tocar fora dela:** `showDialog(barrierDismissible: false)` e `showModalBottomSheet(isDismissible: false, showDragHandle: true)`. Toda a janela tem de ter forma de fechar (botão; nos painéis inferiores, também a pega).
+- **Enter submete sempre o formulário** (`onSubmitted` → acção principal).
+- Depois de mudar o app, recompilar a versão web e ver capturas em telemóvel e em computador antes de entregar.
+
+## Instalação actual (2026-11-22)
+
+A correr em `https://bazatranquilo.com`, no servidor Serve1 da Luzingu, em `/var/www/BazaTranquilo`. Detalhe e comandos em `PRODUCAO.md` › "Instalação em bazatranquilo.com".
+
+- API: serviço `baza` (systemd, `127.0.0.1:4000`); depois de mudar o código, `npm run build && systemctl restart baza`.
+- Página inicial na raiz (`site/`); app web em `/app/`, servida pelo Nginx a partir de `app/build/web`; depois de mudar o app, `flutter build web --release --base-href /app/ --dart-define=API_URL=https://bazatranquilo.com`.
+- Flutter em `/opt/flutter/bin` (fora do PATH), JDK em `/opt/jdk-17.0.2`, Android SDK em `/opt/android-sdk`.
+- Base de dados: MongoDB do AngoSchool (27019), base `baza`. Os testes usam `baza_teste` e precisam de `MONGODB_TEST_URI` (está no `.env`).
+- Mapas em Docker com o mapa na porta 8088 (`mapas/.env`).
 
 ## Pontos em aberto antes de lançar
 

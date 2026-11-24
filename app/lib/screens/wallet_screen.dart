@@ -47,6 +47,7 @@ class _WalletScreenState extends State<WalletScreen> {
 
   Future<void> _topUp() async {
     final amount = await showModalBottomSheet<int>(
+      isDismissible: false,
       context: context,
       backgroundColor: Colors.white,
       showDragHandle: true,
@@ -92,6 +93,7 @@ class _WalletScreenState extends State<WalletScreen> {
 
   Future<void> _withdraw(int balance, int minimum) async {
     final done = await showModalBottomSheet<bool>(
+      isDismissible: false,
       context: context,
       backgroundColor: Colors.white,
       showDragHandle: true,

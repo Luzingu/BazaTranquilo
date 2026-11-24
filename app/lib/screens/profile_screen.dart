@@ -6,6 +6,7 @@ import '../core/format.dart';
 import '../core/theme.dart';
 import '../state/session.dart';
 import '../widgets/common.dart';
+import '../widgets/phone_confirm.dart';
 import '../widgets/profile_photo.dart';
 
 /// "Os meus dados": foto, nome, email de contacto, telefone e contacto de emergência.
@@ -55,6 +56,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _sheet(Widget child) => showModalBottomSheet<void>(
+    isDismissible: false,
     context: context,
     backgroundColor: Colors.white,
     showDragHandle: true,
@@ -67,6 +69,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final session = context.read<Session>();
     final typed = TextEditingController();
     final confirmed = await showDialog<bool>(
+      barrierDismissible: false,
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Eliminar a conta?'),
@@ -178,6 +181,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               action: user.phone == null ? 'Adicionar' : 'Alterar',
               onTap: () => _sheet(const _PhoneSheet()),
             ),
+            const PhoneUnconfirmedTile(),
             const SizedBox(height: 20),
             const Text('Senha', style: section),
             _ActionRow(

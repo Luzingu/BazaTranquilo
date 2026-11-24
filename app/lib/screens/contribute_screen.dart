@@ -97,6 +97,7 @@ class _ContributeScreenState extends State<ContributeScreen> {
 
   Future<void> _remove(Map<String, dynamic> place) async {
     final confirmed = await showDialog<bool>(
+      barrierDismissible: false,
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Remover este local?'),

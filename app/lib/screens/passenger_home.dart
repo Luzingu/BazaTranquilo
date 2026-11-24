@@ -219,6 +219,7 @@ class _PassengerHomeState extends State<PassengerHome> {
 
   Future<void> _cancel(Ride ride) async {
     final confirmed = await showDialog<bool>(
+      barrierDismissible: false,
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Cancelar a corrida?'),
@@ -661,6 +662,7 @@ class _PassengerHomeState extends State<PassengerHome> {
   Future<void> _pickPayment(Estimate estimate) async {
     final balance = context.read<Session>().user!.walletBalance;
     final chosen = await showModalBottomSheet<String>(
+      isDismissible: false,
       context: context,
       backgroundColor: Colors.white,
       showDragHandle: true,
@@ -700,6 +702,7 @@ class _PassengerHomeState extends State<PassengerHome> {
       near: _pickup?.latLng ?? _me,
     );
     final chosen = await showModalBottomSheet<Object>(
+      isDismissible: false,
       context: context,
       backgroundColor: Colors.white,
       showDragHandle: true,

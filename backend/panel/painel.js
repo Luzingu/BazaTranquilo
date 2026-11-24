@@ -454,7 +454,7 @@ const sections = {
             ['Motorista', 'Frota', 'Viatura', 'Documentos', 'Estado', { label: 'Hoje', num: true }, 'Registo', ''],
             drivers.map(
               (d) => `<tr>
-                <td>${person(d, `${esc(d.phone ?? d.email ?? '')}${d.rating ? ` · ★ ${esc(d.rating)}` : ''}`)}</td>
+                <td>${person(d, `${esc(d.phone ?? d.email ?? '')}${d.phoneVerified === false ? ' · <span class="muted" title="A conta foi criada quando o SMS falhou; o app pede a confirmação quando o SMS voltar a funcionar">número por confirmar</span>' : ''}${d.rating ? ` · ★ ${esc(d.rating)}` : ''}`)}</td>
                 <td>${esc(d.fleet ?? '—')}</td>
                 <td>${d.vehicle ? `${esc(d.vehicle.category)} · ${esc(d.vehicle.label)}<br><span class="muted">${esc(d.vehicle.color)} · ${esc(d.vehicle.plate)}</span>` : '—'}</td>
                 <td>${badge(VERIFICATION[d.verification])}</td>
@@ -633,7 +633,7 @@ const sections = {
             passengers.map(
               (p) => `<tr>
                 <td>${person(p)}</td>
-                <td>${esc(p.phone ?? p.email ?? '—')}</td>
+                <td>${esc(p.phone ?? p.email ?? '—')}${p.deactivated ? '<br><span class="muted small" title="O número é também de um motorista: cada número só pode ter um tipo de conta. As corridas ficam no histórico.">Desactivada · número de motorista</span>' : ''}${p.phoneVerified === false ? '<br><span class="muted small" title="A conta foi criada quando o SMS falhou; o app pede a confirmação quando o SMS voltar a funcionar">Número por confirmar</span>' : ''}</td>
                 <td class="num">${esc(p.rides)}</td>
                 <td class="num">${p.rating ? `★ ${esc(p.rating)}` : '—'}</td>
                 <td>${esc(day(p.createdAt))}</td>
@@ -1060,7 +1060,7 @@ const sections = {
                 : 'O app pede a senha a quem já tem conta, sem enviar SMS. Criar conta continua a exigir o código, para confirmar o número.',
               `<button type="button" class="btn${a.otp ? ' danger' : ' primary'}" id="otp-toggle">${a.otp ? 'Desligar' : 'Voltar a ligar'}</button>`,
             )}
-            ${setting('key', 'blue', 'Contas com senha', `${esc(a.passengers.withPassword + a.drivers.withPassword)} de ${esc(a.passengers.total + a.drivers.total)}`, `${esc(a.passengers.withPassword)} de ${esc(a.passengers.total)} passageiros e ${esc(a.drivers.withPassword)} de ${esc(a.drivers.total)} motoristas.${without > 0 ? ' As restantes criam a senha na próxima vez que abrirem o app.' : ''} Para repor uma senha esquecida, use "Repor senha" em Motoristas ou Passageiros.`, '')}
+            ${setting('key', 'blue', 'Contas com senha', `${esc(a.passengers.withPassword + a.drivers.withPassword)} de ${esc(a.passengers.total + a.drivers.total)}`, `${esc(a.passengers.withPassword)} de ${esc(a.passengers.total)} passageiros e ${esc(a.drivers.withPassword)} de ${esc(a.drivers.total)} motoristas.${without > 0 ? ' As restantes criam a senha na próxima vez que abrirem o app.' : ''} Para repor uma senha esquecida, use "Repor senha" em Motoristas ou Passageiros.${a.passengers.unverified + a.drivers.unverified > 0 ? ` ${esc(a.passengers.unverified + a.drivers.unverified)} com o número por confirmar (criadas quando o SMS falhou): o app pede o código quando o SMS voltar a funcionar.` : ''}`, '')}
           </div>`;
         const rateModal = (title, intro, value, path) =>
           modal({

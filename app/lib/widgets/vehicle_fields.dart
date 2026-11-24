@@ -67,6 +67,7 @@ class VehicleFields extends StatelessWidget {
 
   Future<void> _pickCategory(BuildContext context) async {
     final chosen = await showModalBottomSheet<String>(
+      isDismissible: false,
       context: context,
       backgroundColor: Colors.white,
       showDragHandle: true,
@@ -284,6 +285,7 @@ class _ColorField extends StatelessWidget {
 
   Future<void> _pick(BuildContext context) async {
     final chosen = await showModalBottomSheet<String>(
+      isDismissible: false,
       context: context,
       backgroundColor: Colors.white,
       showDragHandle: true,

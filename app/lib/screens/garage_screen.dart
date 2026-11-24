@@ -30,6 +30,7 @@ class GarageScreen extends StatelessWidget {
   Future<void> _remove(BuildContext context, Vehicle v) async {
     final api = context.read<Session>().api;
     final confirmed = await showDialog<bool>(
+      barrierDismissible: false,
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Remover ${v.make} ${v.carModel} (${v.plate})?'),

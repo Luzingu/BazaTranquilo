@@ -11,6 +11,7 @@ import '../state/session.dart';
 Future<void> changeProfilePhoto(BuildContext context) async {
   final session = context.read<Session>();
   final choice = await showModalBottomSheet<String>(
+    isDismissible: false,
     context: context,
     backgroundColor: Colors.white,
     showDragHandle: true,

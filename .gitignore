@@ -2,3 +2,9 @@ node_modules
 .DS_Store
 baza-servidor.tar.gz
 .claude/
+
+# APK para testes (compilados; não vão para o git)
+/site/baixar/
+
+# APK servidos pelo site para descarregar (binários grandes, gerados pelo flutter build)
+site/baixar/

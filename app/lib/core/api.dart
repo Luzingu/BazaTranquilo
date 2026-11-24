@@ -8,9 +8,12 @@ import 'package:http/http.dart' as http;
 import 'config.dart';
 
 class ApiException implements Exception {
-  ApiException(this.status, this.message);
+  ApiException(this.status, this.message, [this.data = const {}]);
   final int status;
   final String message;
+
+  /// A resposta inteira do servidor (ex.: `otherRole` quando o número é de outro tipo de conta).
+  final Map<String, dynamic> data;
   @override
   String toString() => message;
 }
@@ -99,6 +102,7 @@ class ApiClient {
         throw ApiException(
           response.statusCode,
           json['error'] as String? ?? 'Erro ${response.statusCode}',
+          json,
         );
       }
       return json;

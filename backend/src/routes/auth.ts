@@ -1,5 +1,6 @@
 import { createHmac, randomInt, timingSafeEqual } from 'node:crypto';
 import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 import express, { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
@@ -8,6 +9,7 @@ import { HttpError, parse, requireAuth, signToken } from '../http.js';
 import {
   DriverModel,
   PassengerModel,
+  assertPhoneFreeForRole,
   createAccount,
   findAccount,
   publicAccount,
@@ -19,14 +21,15 @@ import { ACTIVE_STATUSES, RideModel } from '../models/Ride.js';
 import { deleteFile, deleteFilesOf, saveImage } from '../services/files.js';
 import { settings } from '../services/settings.js';
 import { agentByPhone, agentTicketFor } from './agent.js';
-import { sendSms, smsIsReal } from '../services/sms.js';
+import { sendSms, smsIsReal, smsLooksHealthy } from '../services/sms.js';
+import { dropLiveSessions } from '../services/realtime.js';
 
 export const authRouter = Router();
 
 // Em desenvolvimento o limite é largo, para os testes automáticos (muitas contas seguidas).
 const limiter = rateLimit({ windowMs: 10 * 60_000, limit: config.isDev ? 400 : 30, standardHeaders: true, legacyHeaders: false });
 
-/** Tipo de conta em que se está a entrar: a mesma pessoa pode ter as duas. */
+/** Tipo de conta em que se está a entrar (cada número só tem um tipo). */
 const role = z.enum(['passenger', 'driver']);
 
 /** Aceita "923 456 789", "+244923456789", etc. e devolve o formato +244XXXXXXXXX. */
@@ -57,6 +60,33 @@ const hashPassword = (value: string) => bcrypt.hash(value, 11);
 
 const OTP_OFF = 'Já tem conta com este número: entre com o número e a senha.';
 
+// ── Criar conta quando o SMS falha ──────────────────────────────────────────
+// Se o servidor não conseguir enviar o código a quem cria conta, a pessoa não
+// fica à porta: recebe um bilhete curto, escolhe a senha e entra. A conta fica
+// com o número "por confirmar" e o app pede o código mais tarde, quando o SMS
+// estiver a funcionar e a pessoa não estiver numa corrida (/me/phone-confirmation).
+// Quem confirmar depois o número por SMS no ecrã de entrada é o dono dele e
+// recupera a conta (ver /otp/verify).
+const SIGNUP_TICKET_TTL = '15m';
+const signSignupTicket = (phone: string, r: 'passenger' | 'driver') =>
+  jwt.sign({ sub: phone, signupRole: r }, config.jwtSecret, { expiresIn: SIGNUP_TICKET_TTL });
+function readSignupTicket(token: string): { phone: string; role: 'passenger' | 'driver' } | null {
+  try {
+    const p = jwt.verify(token, config.jwtSecret);
+    if (typeof p !== 'object' || typeof p.sub !== 'string') return null;
+    if (p.signupRole !== 'passenger' && p.signupRole !== 'driver') return null;
+    return { phone: p.sub, role: p.signupRole };
+  } catch {
+    return null;
+  }
+}
+
+/** O SMS falhou do lado do servidor ou da operadora (não por erro de quem o pediu). */
+const smsFailedOnOurSide = (err: unknown) => {
+  const status = err instanceof HttpError ? err.status : 500;
+  return status >= 500;
+};
+
 /** O que o ecrã de entrada do app precisa de saber antes de pedir dados. */
 authRouter.get('/options', (_req, res) => {
   res.json({ otp: settings.otpEnabled });
@@ -66,6 +96,7 @@ authRouter.post('/otp/request', limiter, async (req, res) => {
   const body = parse(z.object({ phone: z.string().min(6).max(20), role }), req.body);
   const phone = normalizePhone(body.phone);
   if (await agentByPhone(phone)) throw new HttpError(409, 'Este número não pode ser usado aqui.');
+  if (!(await findAccount(body.role, { phone }))) await assertPhoneFreeForRole(body.role, phone);
   // Com o código desligado no painel, o SMS só serve para confirmar o número de
   // quem cria conta (ou de quem ainda não tem senha); os restantes usam a senha.
   if (!settings.otpEnabled && (await findAccount(body.role, { phone }))?.passwordHash) {
@@ -113,7 +144,11 @@ authRouter.post('/start', limiter, async (req, res) => {
     res.json({ phone, method: 'otp', canUsePassword: false, ...devCode(code) });
     return;
   }
-  const hasPassword = Boolean((await findAccount(body.role, { phone }))?.passwordHash);
+  const existing = await findAccount(body.role, { phone });
+  // Um número, um só tipo de conta: avisa antes de gastar um SMS, e o app
+  // oferece a troca para o tipo certo (`otherRole`).
+  if (!existing) await assertPhoneFreeForRole(body.role, phone);
+  const hasPassword = Boolean(existing?.passwordHash);
   if (body.noCode) {
     res.json({ phone, method: hasPassword ? 'password' : 'otp' });
     return;
@@ -131,6 +166,11 @@ authRouter.post('/start', limiter, async (req, res) => {
     const status = err instanceof HttpError ? err.status : 500;
     if (hasPassword && (status >= 500 || status === 429)) {
       res.json({ phone, method: 'password', reason: 'sms_failed' });
+      return;
+    }
+    // Conta nova e o SMS não saiu: cria-se na mesma, com o número por confirmar.
+    if (!existing && smsFailedOnOurSide(err)) {
+      res.json({ phone, method: 'signup', reason: 'sms_failed', signupTicket: signSignupTicket(phone, body.role) });
       return;
     }
     throw err;
@@ -169,9 +209,24 @@ authRouter.post('/otp/verify', limiter, async (req, res) => {
 
   let account = await findAccount(body.role, { phone });
   const isNew = !account;
+  if (!account) await assertPhoneFreeForRole(body.role, phone);
   account ??= await createAccount(body.role, { phone });
+  // Conta criada sem o SMS chegar: quem acabou de receber o código é o dono do
+  // número. A conta passa a confirmada, as sessões abertas noutros aparelhos caem
+  // e a senha volta a ser definida — se alguém criou a conta com o número de
+  // outra pessoa, perde-lhe o acesso.
+  let recovered = false;
+  if (account.phoneVerified === false) {
+    account.phoneVerified = true;
+    account.passwordHash = undefined;
+    account.sessionVersion = (account.sessionVersion ?? 0) + 1;
+    await account.save();
+    dropLiveSessions(account.id);
+    recovered = true;
+  }
   res.json({
-    token: signToken(body.role, account.id),
+    ...(recovered ? { phoneRecovered: true } : {}),
+    token: signToken(body.role, account.id, account.sessionVersion),
     user: publicAccount(body.role, account),
     isNew,
   });
@@ -193,7 +248,7 @@ const passwordLimiter = rateLimit({
 });
 
 const signedIn = (r: 'passenger' | 'driver', account: Parameters<typeof publicAccount>[1], isNew = false) => ({
-  token: signToken(r, account.id),
+  token: signToken(r, account.id, account.sessionVersion),
   user: publicAccount(r, account),
   isNew,
 });
@@ -214,8 +269,31 @@ authRouter.post('/password/login', limiter, passwordLimiter, async (req, res) =>
   res.json(signedIn(body.role, account));
 });
 
-// Criar conta exige sempre confirmar o número por SMS (rota /otp); a senha
-// define-se a seguir, em PUT /me/password.
+/**
+ * Criar conta sem o código: só com o bilhete que /start dá quando o SMS falha.
+ * A senha é obrigatória (é a única forma de voltar a entrar até o número ser
+ * confirmado).
+ */
+authRouter.post('/signup', limiter, async (req, res) => {
+  const body = parse(z.object({ ticket: z.string().min(10).max(2000), password }), req.body);
+  const ticket = readSignupTicket(body.ticket);
+  if (!ticket) throw new HttpError(400, 'O pedido expirou. Volte a escrever o seu número.');
+  if (await agentByPhone(ticket.phone)) throw new HttpError(409, 'Este número não pode ser usado aqui.');
+  if (await findAccount(ticket.role, { phone: ticket.phone })) {
+    throw new HttpError(409, 'Já existe uma conta com este número. Volte atrás e entre com a senha.');
+  }
+  await assertPhoneFreeForRole(ticket.role, ticket.phone);
+  const account = await createAccount(ticket.role, {
+    phone: ticket.phone,
+    passwordHash: await hashPassword(body.password),
+    phoneVerified: false,
+  });
+  console.log(`Conta criada com o número por confirmar (${ticket.role}): o SMS falhou.`);
+  res.json(signedIn(ticket.role, account, true));
+});
+
+// Criar conta: confirma-se o número por SMS (rota /otp) e a senha define-se a
+// seguir, em PUT /me/password. Se o SMS falhar, /start dá um bilhete para /signup.
 authRouter.post('/password/register', () => {
   throw new HttpError(410, 'Para criar conta, confirme o número com o código SMS.');
 });
@@ -260,6 +338,12 @@ authRouter.post('/password/reset', limiter, async (req, res) => {
   const account = await findAccount(body.role, { phone });
   if (!account) throw new HttpError(400, 'Código expirado. Peça um novo.');
   account.passwordHash = await hashPassword(body.password);
+  // O código chegou: o número fica confirmado e quem o tinha usado sem ser dono perde a sessão.
+  if (account.phoneVerified === false) {
+    account.phoneVerified = true;
+    account.sessionVersion = (account.sessionVersion ?? 0) + 1;
+    dropLiveSessions(account.id);
+  }
   await account.save();
   res.json(signedIn(body.role, account));
 });
@@ -426,6 +510,7 @@ meRouter.post('/phone/request', limiter, async (req, res) => {
   if (await agentByPhone(phone)) throw new HttpError(409, 'Esse número já está a ser usado por outra conta.');
   const other = await findAccount(req.role, { phone });
   if (other) throw new HttpError(409, 'Esse número já está a ser usado por outra conta.');
+  await assertPhoneFreeForRole(req.role, phone, 'Esse número já está a ser usado por outra conta.');
   const key = `change:${req.role}:${req.account.id}:${phone}`;
   const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
   await sendSms(phone, otpText(code));
@@ -453,8 +538,73 @@ meRouter.post('/phone/verify', limiter, async (req, res) => {
   const given = Buffer.from(hashCode(key, body.code), 'hex');
   if (!timingSafeEqual(expected, given)) throw new HttpError(400, 'Código incorrecto.');
   await otp.deleteOne();
+  // Pode ter sido registado noutro tipo de conta entre o pedido e a confirmação.
+  await assertPhoneFreeForRole(req.role, phone, 'Esse número já está a ser usado por outra conta.');
   req.account.phone = phone;
+  req.account.phoneVerified = true;
   await req.account.save(); // o índice único trava números repetidos
   res.json({ user: publicAccount(req.role, req.account) });
 });
 
+
+// ── Confirmar o número mais tarde (contas criadas quando o SMS falhou) ──────
+// O app pergunta aqui se é boa altura para pedir o código. Só é quando o envio
+// de SMS parece estar a funcionar e a pessoa não está numa corrida (nem, sendo
+// motorista, online à espera de pedidos: não se mete um código à frente de uma
+// corrida a chegar).
+
+type ConfirmBlock = 'sms_down' | 'in_ride' | 'online';
+
+async function confirmationBlock(req: express.Request): Promise<ConfirmBlock | null> {
+  const mine = req.role === 'driver' ? { driver: req.account._id } : { passenger: req.account._id };
+  if (await RideModel.exists({ ...mine, status: { $in: ACTIVE_STATUSES } })) return 'in_ride';
+  if (req.role === 'driver' && req.driver.isOnline) return 'online';
+  if (!(await smsLooksHealthy())) return 'sms_down';
+  return null;
+}
+
+const confirmKey = (req: express.Request) => `confirm:${req.role}:${req.account.id}`;
+
+meRouter.get('/phone-confirmation', async (req, res) => {
+  if (req.account.phoneVerified !== false) {
+    res.json({ verified: true, canAskNow: false });
+    return;
+  }
+  const block = await confirmationBlock(req);
+  res.json({ verified: false, canAskNow: !block, ...(block ? { reason: block } : {}), phone: req.account.phone });
+});
+
+meRouter.post('/phone-confirmation/request', limiter, async (req, res) => {
+  if (req.account.phoneVerified !== false) throw new HttpError(400, 'O seu número já está confirmado.');
+  if (!req.account.phone) throw new HttpError(400, 'A conta não tem número de telefone.');
+  const block = await confirmationBlock(req);
+  if (block === 'in_ride') throw new HttpError(409, 'Termine a corrida primeiro: confirmamos o número a seguir.');
+  if (block === 'online') throw new HttpError(409, 'Fique offline para confirmar o número.');
+  const key = confirmKey(req);
+  const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
+  // Mesmo que o estado do SMS pareça mau, deixa-se tentar quando é a pessoa a pedir.
+  await sendSms(req.account.phone, otpText(code));
+  await OtpModel.findOneAndUpdate(
+    { key },
+    { codeHash: hashCode(key, code), attempts: 0, expiresAt: new Date(Date.now() + config.otpTtlMs) },
+    { upsert: true },
+  );
+  res.json({ phone: req.account.phone, ...devCode(code) });
+});
+
+meRouter.post('/phone-confirmation/verify', limiter, async (req, res) => {
+  const body = parse(z.object({ code: z.string().regex(/^\d{6}$/) }), req.body);
+  const key = confirmKey(req);
+  const otp = await OtpModel.findOneAndUpdate(
+    { key, expiresAt: { $gt: new Date() }, attempts: { $lt: config.otpMaxAttempts } },
+    { $inc: { attempts: 1 } },
+  );
+  if (!otp) throw new HttpError(400, 'Código expirado. Peça um novo.');
+  const expected = Buffer.from(otp.codeHash, 'hex');
+  const given = Buffer.from(hashCode(key, body.code), 'hex');
+  if (!timingSafeEqual(expected, given)) throw new HttpError(400, 'Código incorrecto.');
+  await otp.deleteOne();
+  req.account.phoneVerified = true;
+  await req.account.save();
+  res.json({ user: publicAccount(req.role, req.account) });
+});

@@ -24,6 +24,7 @@ import 'package:baza/state/call_state.dart';
 import 'package:baza/state/ride_state.dart';
 import 'package:baza/state/session.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
@@ -115,9 +116,17 @@ Future<void> _pump(
 
 void main() {
   testWidgets('login: só por telefone, com o tipo de conta', (tester) async {
+    FlutterSecureStorage.setMockInitialValues({});
     await _pump(tester, Session(), const AuthScreen());
+    await tester.pumpAndSettle();
+    // Primeira vez: escolhe-se em grande se vai viajar ou conduzir.
+    expect(find.text('Como vai usar o Bazá?'), findsOneWidget);
+    expect(find.text('Quero viajar'), findsOneWidget);
+    expect(find.text('Quero conduzir'), findsOneWidget);
+    await tester.tap(find.text('Quero viajar'));
+    await tester.pumpAndSettle();
+    expect(find.text('A entrar como passageiro'), findsOneWidget);
     expect(find.text('Continuar'), findsOneWidget);
-    expect(find.text('Tipo de conta'), findsOneWidget);
     // O login por email foi descontinuado: não há email nem palavra-passe.
     expect(find.textContaining('email'), findsNothing);
     expect(find.textContaining('alavra-passe'), findsNothing);
@@ -126,13 +135,15 @@ void main() {
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pump();
     expect(find.text('Escreva o seu número de telefone.'), findsOneWidget);
-    // Trocar de perfil muda o texto de entrada.
-    await tester.tap(find.text('Motorista'));
-    await tester.pump();
-    expect(
-      find.text('Entre ou crie a sua conta de motorista.'),
-      findsOneWidget,
-    );
+    // "Trocar" volta à escolha; o tipo escolhido fica à vista e é lembrado.
+    await tester.tap(find.text('Trocar'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Quero conduzir'));
+    await tester.tap(find.text('Quero conduzir'));
+    await tester.pumpAndSettle();
+    expect(find.text('A entrar como motorista'), findsOneWidget);
+    expect(find.text('Conduza com o Bazá'), findsOneWidget);
+    expect(await const FlutterSecureStorage().read(key: 'lastRole'), 'driver');
   });
 
   testWidgets(

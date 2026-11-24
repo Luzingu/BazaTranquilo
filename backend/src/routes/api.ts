@@ -249,10 +249,16 @@ ridesRouter.post('/estimate', requirePassenger, async (req, res) => {
     req.body,
   );
   // Colaborador de uma empresa cliente: pode viajar por conta dela.
-  const company = await companyStatus(req.passenger.phone);
+  // Só com o número confirmado: senão, quem criasse conta com o número de um
+  // colaborador viajaria por conta da empresa dele.
+  const verified = req.passenger.phoneVerified !== false;
+  const company = verified ? await companyStatus(req.passenger.phone) : null;
+  const companyLocked = !verified && Boolean(await companyStatus(req.passenger.phone));
   res.json({
     ...(await estimate(body.pickup, body.dropoff, body.stops)),
     company,
+    /** É colaborador de uma empresa, mas tem de confirmar o número para viajar por conta dela. */
+    ...(companyLocked ? { companyLocked: true } : {}),
     paymentMethods: [
       ...(company ? ['corporate'] : []),
       'cash',

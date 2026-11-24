@@ -1,12 +1,13 @@
 import { monthlyFee, subscriptionState } from '../services/settings.js';
 import { MAX_VEHICLES, SERVICE_KEYS, config, type RideCategory } from '../config.js';
+import { HttpError } from '../http.js';
 import { Schema, model, type InferSchemaType, type HydratedDocument, type Types } from 'mongoose';
 
 /**
  * Entra-se só com o telefone (código SMS); o email é apenas um contacto opcional.
  * Passageiros e motoristas vivem em colecções separadas (`passageiros` e
- * `motoristas`; os nomes das colecções na base de dados são em português): o mesmo telefone ou
- * email pode ter uma conta de cada tipo, com carteira e avaliação próprias.
+ * `motoristas`; os nomes das colecções na base de dados são em português), cada uma com
+ * carteira e avaliação próprias. Um telefone só pode ter um tipo de conta (ver otherRoleWith).
  */
 export type Role = 'passenger' | 'driver';
 
@@ -15,6 +16,23 @@ const commonFields = () => ({
   phone: { type: String, unique: true, sparse: true },
   email: { type: String, unique: true, sparse: true, lowercase: true, trim: true },
   passwordHash: { type: String, select: false },
+  /**
+   * O número foi confirmado por SMS. Só fica false em contas criadas quando o
+   * envio do SMS falhou; as restantes (e as antigas, sem o campo) contam como
+   * confirmadas. O app pede a confirmação mais tarde (rotas /me/phone-confirmation).
+   */
+  phoneVerified: { type: Boolean, default: true },
+  /** Sobe quando o dono do número recupera a conta: as sessões com o valor antigo deixam de valer. */
+  sessionVersion: { type: Number, default: 0 },
+  /**
+   * Conta desactivada (não entra). Hoje só acontece a passageiros cujo número
+   * também era de um motorista, quando a regra "um número, um só tipo de conta"
+   * entrou (2026-11-24). O telefone passa para `formerPhone`, para o número
+   * ficar livre; as corridas e o resto dos dados ficam.
+   */
+  deactivatedAt: Date,
+  deactivatedReason: String,
+  formerPhone: String,
   /** Id (GridFS) da foto de perfil. */
   photo: String,
   /** Pessoa de confiança a quem enviar a localização numa emergência. */
@@ -166,9 +184,34 @@ export async function findAccount(
   return account as AccountDoc | null;
 }
 
+const ROLE_LABEL: Record<Role, string> = { passenger: 'passageiro', driver: 'motorista' };
+
+/**
+ * Um número, um só tipo de conta: o mesmo telefone não pode ser de um
+ * passageiro e de um motorista ao mesmo tempo. Devolve o outro tipo se o
+ * número já lá estiver.
+ */
+export async function otherRoleWith(role: Role, phone: string): Promise<Role | null> {
+  const other: Role = role === 'driver' ? 'passenger' : 'driver';
+  const exists = other === 'driver' ? await DriverModel.exists({ phone }) : await PassengerModel.exists({ phone });
+  return exists ? other : null;
+}
+
+/** Recusa o número se já tiver conta do outro tipo (`otherRole` vai na resposta, para o app oferecer a troca). */
+export async function assertPhoneFreeForRole(role: Role, phone: string, message?: string) {
+  const other = await otherRoleWith(role, phone);
+  if (other) {
+    throw new HttpError(
+      409,
+      message ?? `Este número já está registado como ${ROLE_LABEL[other]}. Cada número só pode ter um tipo de conta.`,
+      { otherRole: other },
+    );
+  }
+}
+
 export function createAccount(
   role: Role,
-  data: { name?: string; phone?: string; email?: string; passwordHash?: string },
+  data: { name?: string; phone?: string; email?: string; passwordHash?: string; phoneVerified?: boolean },
 ): Promise<AccountDoc> {
   return role === 'driver' ? DriverModel.create(data) : PassengerModel.create(data);
 }
@@ -248,6 +291,8 @@ export function publicAccount(role: Role, a: AccountDoc) {
     email: a.email ?? null,
     /** Se já definiu a senha (entrada sem código SMS). */
     hasPassword: Boolean(a.passwordHash),
+    /** false: a conta foi criada sem o SMS chegar e o número está por confirmar. */
+    phoneVerified: a.phoneVerified !== false,
     photoUrl: photoUrl(a),
     emergencyContact: a.emergencyContact?.phone
       ? { name: a.emergencyContact.name ?? '', phone: a.emergencyContact.phone }

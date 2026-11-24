@@ -79,6 +79,7 @@ class SafetyBar extends StatelessWidget {
               minimumSize: const Size(104, 46),
             ),
             onPressed: () => showModalBottomSheet<void>(
+              isDismissible: false,
               context: context,
               backgroundColor: Colors.white,
               showDragHandle: true,
@@ -160,6 +161,7 @@ class _SosSheetState extends State<_SosSheet> {
   Future<void> _cancelAlert() async {
     final password = TextEditingController();
     final done = await showDialog<bool>(
+      barrierDismissible: false,
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Cancelar o alerta'),

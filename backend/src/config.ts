@@ -10,6 +10,8 @@ if (!isDev && (!env.JWT_SECRET || env.JWT_SECRET === 'troque-este-segredo')) {
 export const config = {
   isDev,
   port: Number(env.PORT ?? 4000),
+  /** Endereço em que a API escuta. Vazio = todos; atrás de um proxy HTTPS, usar 127.0.0.1. */
+  host: env.HOST || undefined,
   mongoUri: env.MONGODB_URI ?? 'mongodb://127.0.0.1:27017/baza',
   jwtSecret: env.JWT_SECRET ?? 'troque-este-segredo',
   osrmUrl: env.OSRM_URL ?? 'https://router.project-osrm.org',
@@ -72,6 +74,8 @@ export const config = {
    */
   smsProvider: env.SMS_PROVIDER ?? (env.TELCOSMS_API_KEY ? 'telcosms' : 'console'),
   telcoSmsApiKey: env.TELCOSMS_API_KEY ?? '',
+  /** Só em desenvolvimento, com SMS simulados: números (+244…) cujo primeiro envio falha (testes). */
+  smsFailNumbers: (env.SMS_FAIL_NUMBERS ?? '').split(',').map((n) => n.trim()).filter(Boolean),
   telcoSmsUrl: (env.TELCOSMS_URL ?? 'https://www.telcosms.co.ao/api/v2').replace(/\/$/, ''),
 
   /**

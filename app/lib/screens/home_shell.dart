@@ -7,6 +7,7 @@ import '../state/call_state.dart';
 import '../state/ride_state.dart';
 import '../state/session.dart';
 import '../widgets/common.dart';
+import '../widgets/phone_confirm.dart';
 import '../widgets/profile_photo.dart';
 import 'call_screen.dart';
 import 'driver_account_screen.dart';
@@ -42,7 +43,9 @@ class HomeShell extends StatelessWidget {
               CallState(context.read<Session>(), context.read<RideState>()),
         ),
       ],
-      child: const _CallHost(child: NoticeHost(child: _Shell())),
+      child: const _CallHost(
+        child: NoticeHost(child: PhoneConfirmHost(child: _Shell())),
+      ),
     );
   }
 }
@@ -307,6 +310,11 @@ class _Menu extends StatelessWidget {
                   side: BorderSide.none,
                 ),
               ),
+            ),
+            // Conta criada sem o SMS chegar: confirmar o número a qualquer momento.
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: PhoneUnconfirmedTile(),
             ),
             const SizedBox(height: 8),
             // A carteira pode estar desligada no servidor.

@@ -11,6 +11,7 @@ import { HttpError, parse } from '../http.js';
 import {
   DriverModel,
   PassengerModel,
+  assertPhoneFreeForRole,
   documentFile,
   reviewDocument,
   vehicleDocsComplete,
@@ -290,6 +291,7 @@ async function driverRows(drivers: DriverDoc[]) {
       name: d.name || '(sem nome)',
       photoUrl: d.photo ? `/uploads/${d.photo}` : null,
       phone: d.phone ?? null,
+      phoneVerified: d.phoneVerified !== false,
       email: d.email ?? null,
       fleet: d.fleetName ?? null,
       verification: verification(d),
@@ -837,6 +839,7 @@ admin.get('/acesso', async (_req, res) => {
     [PassengerModel, DriverModel].map(async (M) => ({
       total: await (M as typeof PassengerModel).countDocuments({}),
       withPassword: await (M as typeof PassengerModel).countDocuments({ passwordHash: { $exists: true, $ne: null } }),
+      unverified: await (M as typeof PassengerModel).countDocuments({ phoneVerified: false }),
     })),
   );
   res.json({ otp: settings.otpEnabled, passengers, drivers });
@@ -941,7 +944,11 @@ admin.get('/passageiros', async (req, res) => {
       id: p.id as string,
       name: p.name || '(sem nome)',
       photoUrl: p.photo ? `/uploads/${p.photo}` : null,
-      phone: p.phone ?? null,
+      phone: p.phone ?? p.formerPhone ?? null,
+      /** Desactivada (o número era também de um motorista): não entra no app. */
+      deactivated: Boolean(p.deactivatedAt),
+      /** false: conta criada quando o SMS falhou; o número está por confirmar. */
+      phoneVerified: p.phoneVerified !== false,
       email: p.email ?? null,
       star: !!p.star,
       rides: by.get(p.id) ?? 0,
@@ -1517,6 +1524,11 @@ fleet.post('/motoristas', async (req, res) => {
         : `Já existe um motorista com esse número. Peça-lhe para introduzir o código ${req.panel.fleet!.joinCode} no app, em "Frota".`,
     );
   }
+  await assertPhoneFreeForRole(
+    'driver',
+    phone,
+    'Esse número já tem conta de passageiro no Bazá. Cada número só pode ter um tipo de conta: o motorista tem de usar outro número.',
+  );
   await DriverModel.create({ name: body.name, phone, fleet: req.panel.id, fleetName: req.panel.fleet!.name });
   res.status(201).json({ ok: true });
 });

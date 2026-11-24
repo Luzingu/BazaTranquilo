@@ -12,6 +12,7 @@ import 'screens/vehicle_screen.dart';
 import 'services/notifier.dart';
 import 'state/session.dart';
 import 'widgets/common.dart';
+import 'widgets/desktop_frame.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -37,6 +38,9 @@ class BazaApp extends StatelessWidget {
       title: appFullName,
       debugShowCheckedModeBanner: false,
       theme: bazaTheme(),
+      // No computador, o app aparece numa janela centrada (ver DesktopFrame).
+      builder: (context, child) =>
+          DesktopFrame(child: child ?? const SizedBox()),
       home: const _Root(),
     );
   }
@@ -198,9 +202,11 @@ class _PasswordSetupScreenState extends State<PasswordSetupScreen> {
               style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Com o seu número e esta senha entra no Bazá mesmo quando o código por SMS não chega.',
-              style: TextStyle(color: BazaColors.muted),
+            Text(
+              session.phoneRecovered
+                  ? 'Número confirmado. Esta conta tinha sido criada sem o SMS chegar, por isso, por segurança, escolha uma senha nova.'
+                  : 'Com o seu número e esta senha entra no Bazá mesmo quando o código por SMS não chega.',
+              style: const TextStyle(color: BazaColors.muted),
             ),
             const SizedBox(height: 24),
             PasswordField(

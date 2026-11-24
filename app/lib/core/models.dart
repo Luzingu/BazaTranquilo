@@ -139,6 +139,7 @@ class User {
     this.email,
     this.photoUrl,
     this.hasPassword = false,
+    this.phoneVerified = true,
     this.walletEnabled = false,
     this.star = false,
     this.emergencyName,
@@ -155,12 +156,16 @@ class User {
   });
   final String id, name;
 
-  /// 'passenger' ou 'driver'. São contas distintas, mesmo com o mesmo telefone.
+  /// 'passenger' ou 'driver'. Cada número de telefone só tem um tipo de conta.
   final String role;
   final String? phone, email, photoUrl;
 
   /// Se já definiu palavra-passe para entrar com email.
   final bool hasPassword;
+
+  /// false quando a conta foi criada sem o SMS chegar: o número está por
+  /// confirmar e o app pede o código quando o SMS voltar a funcionar.
+  final bool phoneVerified;
 
   /// Se a carteira está disponível no app (pode estar desligada no servidor).
   final bool walletEnabled;
@@ -204,6 +209,7 @@ class User {
     email: j['email'] as String?,
     photoUrl: j['photoUrl'] as String?,
     hasPassword: j['hasPassword'] as bool? ?? false,
+    phoneVerified: j['phoneVerified'] as bool? ?? true,
     walletEnabled: j['walletEnabled'] as bool? ?? false,
     star: j['star'] as bool? ?? false,
     emergencyName:

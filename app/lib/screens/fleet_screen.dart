@@ -37,6 +37,7 @@ class _FleetScreenState extends State<FleetScreen> {
   Future<void> _leave(String fleetName) async {
     final session = context.read<Session>();
     final confirmed = await showDialog<bool>(
+      barrierDismissible: false,
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Sair da frota $fleetName?'),

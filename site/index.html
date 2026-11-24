@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="pt-AO">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bazá Tranquilo — Táxi, moto e carga em Angola | Bazá com Segurança</title>
+<meta name="description" content="Peça táxi, moto ou transporte de carga em Angola pelo telemóvel. Veja o preço antes de pedir, acompanhe o motorista no mapa e partilhe a viagem com quem confia. Bazá com Segurança.">
+<link rel="canonical" href="https://bazatranquilo.com/">
+<meta name="theme-color" content="#14161A">
+<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="pt_AO">
+<meta property="og:site_name" content="Bazá Tranquilo">
+<meta property="og:title" content="Bazá Tranquilo — Táxi, moto e carga em Angola">
+<meta property="og:description" content="Veja o preço antes de pedir, acompanhe o motorista no mapa e partilhe a viagem com quem confia. Bazá com Segurança.">
+<meta property="og:url" content="https://bazatranquilo.com/">
+<meta property="og:image" content="https://bazatranquilo.com/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@graph":[
+{"@type":"Organization","@id":"https://bazatranquilo.com/#org","name":"Bazá Tranquilo","alternateName":"Bazá","url":"https://bazatranquilo.com/","logo":"https://bazatranquilo.com/icon-192.png","slogan":"Bazá com Segurança","areaServed":{"@type":"Country","name":"Angola"}},
+{"@type":"WebSite","@id":"https://bazatranquilo.com/#site","url":"https://bazatranquilo.com/","name":"Bazá Tranquilo","inLanguage":"pt-AO","publisher":{"@id":"https://bazatranquilo.com/#org"}},
+{"@type":"WebApplication","name":"Bazá","url":"https://bazatranquilo.com/app/","applicationCategory":"TravelApplication","operatingSystem":"Android, Web","inLanguage":"pt-AO","description":"Aplicação para pedir táxi, moto e transporte de carga em Angola.","publisher":{"@id":"https://bazatranquilo.com/#org"}},
+{"@type":"FAQPage","mainEntity":[
+{"@type":"Question","name":"Como peço uma corrida no Bazá?","acceptedAnswer":{"@type":"Answer","text":"Abra o Bazá, entre com o seu número de telemóvel, escolha o ponto de recolha e o destino, veja o preço de cada serviço e toque em pedir. Acompanha o motorista no mapa até ele chegar."}},
+{"@type":"Question","name":"Preciso de instalar alguma coisa?","acceptedAnswer":{"@type":"Answer","text":"Não. O Bazá funciona no navegador do telemóvel ou do computador, em bazatranquilo.com/app."}},
+{"@type":"Question","name":"Como pago a corrida?","acceptedAnswer":{"@type":"Answer","text":"Em dinheiro, directamente ao motorista, no fim da viagem. Colaboradores de empresas clientes podem viajar por conta da empresa."}},
+{"@type":"Question","name":"Posso negociar o preço?","acceptedAnswer":{"@type":"Answer","text":"Sim. Nas corridas de moto e de carro pode propor um preço diferente do da tarifa e o motorista aceita ou responde com outro. No triciclo, no XL e nos serviços de carga o preço é sempre combinado entre o cliente e o motorista."}},
+{"@type":"Question","name":"Como me torno motorista do Bazá?","acceptedAnswer":{"@type":"Answer","text":"Crie uma conta de motorista no Bazá, registe a carta de condução e a viatura e envie as fotografias dos documentos: carta, livrete, título de propriedade e seguro. Depois de a equipa os rever, pode ficar online e receber pedidos."}},
+{"@type":"Question","name":"Onde funciona o Bazá?","acceptedAnswer":{"@type":"Answer","text":"Em Angola, onde houver motoristas do Bazá online perto de si. Entre municípios, há viagens com dia, hora e lugares marcados."}}
+]}
+]}
+</script>
+<style>
+:root{--y:#FFC400;--ink:#14161A;--ink2:#1D2026;--mut:#6B7280;--sur:#F4F5F7;--line:#E5E7EB;--r:22px}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;color:var(--ink);background:#fff;line-height:1.55;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+h1,h2,h3{line-height:1.08;letter-spacing:-.03em;margin:0;text-wrap:balance}
+p{margin:0;text-wrap:pretty}
+.w{max-width:1160px;margin:0 auto;padding:0 24px}
+.btn{display:inline-flex;align-items:center;gap:10px;min-height:54px;padding:0 26px;border-radius:16px;font-weight:800;font-size:17px;text-decoration:none;border:2px solid transparent;transition:transform .15s,box-shadow .15s,background .15s;white-space:nowrap}
+.btn:hover{transform:translateY(-2px)}
+.btn:focus-visible,a:focus-visible,button:focus-visible,summary:focus-visible{outline:3px solid #2563EB;outline-offset:3px}
+.by{background:var(--y);color:var(--ink);box-shadow:0 10px 30px rgba(255,196,0,.28)}
+.bo{border-color:rgba(255,255,255,.28);color:#fff}
+.bo:hover{background:rgba(255,255,255,.08)}
+.bi{background:var(--ink);color:#fff}
+.bl{border-color:var(--ink);color:var(--ink)}
+.btn svg{width:20px;height:20px;flex:none}
+
+/* Topo */
+header{position:sticky;top:0;z-index:20;background:rgba(20,22,26,.86);backdrop-filter:blur(14px);border-bottom:1px solid rgba(255,255,255,.07)}
+header .w{display:flex;align-items:center;gap:28px;height:68px}
+.logo{display:flex;align-items:center;gap:11px;text-decoration:none;color:#fff;font-weight:900;font-size:25px;letter-spacing:-.04em}
+.logo img{width:36px;height:36px;border-radius:10px}
+nav{display:flex;gap:26px;margin-left:auto}
+nav a{color:rgba(255,255,255,.74);text-decoration:none;font-weight:600;font-size:15px}
+nav a:hover{color:#fff}
+header .btn{min-height:42px;padding:0 18px;font-size:15px;border-radius:12px;box-shadow:none}
+.painel{color:rgba(255,255,255,.74);text-decoration:none;font-weight:600;font-size:15px;display:flex;align-items:center;gap:7px}
+.painel:hover{color:#fff}
+.painel svg{width:17px;height:17px}
+
+/* Abertura */
+.hero{background:var(--ink);color:#fff;position:relative;overflow:hidden}
+.hero::before{content:"";position:absolute;inset:0;background:radial-gradient(900px 600px at 12% 10%,rgba(255,196,0,.16),transparent 60%)}
+.hero .w{position:relative;display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center;padding-top:76px;padding-bottom:96px}
+.tag{display:inline-flex;align-items:center;gap:9px;padding:7px 14px;border-radius:99px;background:rgba(255,196,0,.13);color:var(--y);font-weight:700;font-size:14px}
+.tag i{width:8px;height:8px;border-radius:50%;background:var(--y);animation:pisca 1.6s infinite}
+h1{font-size:clamp(40px,5.1vw,64px);font-weight:900;margin:22px 0 20px}
+h1 em{font-style:normal;color:var(--y)}
+.hero p.lead{font-size:clamp(17px,1.6vw,20px);color:rgba(255,255,255,.74);max-width:33em}
+.cta{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+.nota{margin-top:20px;font-size:14px;color:rgba(255,255,255,.5)}
+
+/* Mapa animado */
+.mapa{position:relative;aspect-ratio:1/1.05;border-radius:34px;background:#1B1E24;border:1px solid rgba(255,255,255,.08);overflow:hidden;box-shadow:0 40px 90px rgba(0,0,0,.5)}
+.mapa svg{position:absolute;inset:0;width:100%;height:100%}
+.rua{stroke:#2A2E36;stroke-linecap:round;fill:none}
+.quart{fill:#20242B}
+.agua{fill:#18222C}
+.rota{fill:none;stroke:var(--y);stroke-width:7;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:1400;stroke-dashoffset:1400;animation:traca 9s cubic-bezier(.5,0,.3,1) infinite}
+.carro{offset-path:path("M92 448 L92 330 Q92 300 122 300 L250 300 Q280 300 280 270 L280 170 Q280 140 310 140 L410 140");offset-rotate:auto;animation:anda 9s cubic-bezier(.5,0,.3,1) infinite}
+.pulso{transform-box:fill-box;transform-origin:center;animation:pulso 2s ease-out infinite}
+.cartao{position:absolute;left:18px;right:18px;bottom:18px;background:#fff;color:var(--ink);border-radius:22px;padding:16px 18px;display:flex;align-items:center;gap:14px;box-shadow:0 18px 40px rgba(0,0,0,.35)}
+.cartao .av{width:46px;height:46px;border-radius:50%;background:var(--y);display:grid;place-items:center;font-weight:900;font-size:19px;flex:none}
+.cartao b{display:block;font-size:16px;line-height:1.25}
+.cartao span{font-size:13.5px;color:var(--mut)}
+.cartao .min{margin-left:auto;text-align:right;font-weight:900;font-size:25px;line-height:1;font-variant-numeric:tabular-nums}
+.cartao .min small{display:block;font-size:11.5px;font-weight:700;color:var(--mut);margin-top:3px;letter-spacing:.04em;text-transform:uppercase}
+.chip{position:absolute;top:18px;left:18px;background:rgba(20,22,26,.88);color:#fff;border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:9px 13px;font-size:13.5px;font-weight:700;display:flex;gap:8px;align-items:center}
+.chip i{width:9px;height:9px;border-radius:50%;background:#22C55E}
+@keyframes traca{0%{stroke-dashoffset:1400}62%,90%{stroke-dashoffset:0}100%{stroke-dashoffset:0;opacity:0}}
+@keyframes anda{0%{offset-distance:0%}62%,100%{offset-distance:100%}}
+@keyframes pulso{0%{transform:scale(.5);opacity:.7}100%{transform:scale(2.6);opacity:0}}
+@keyframes pisca{50%{opacity:.25}}
+
+/* Faixa */
+.faixa{background:var(--y);color:var(--ink);font-weight:800;overflow:hidden;white-space:nowrap;padding:15px 0;font-size:17px}
+.faixa div{display:inline-block;animation:corre 34s linear infinite}
+.faixa span{margin:0 22px}
+.faixa span::before{content:"➤";margin-right:22px;font-size:13px;vertical-align:1px}
+@keyframes corre{to{transform:translateX(-50%)}}
+
+section{padding:96px 0}
+.sob{font-weight:800;font-size:13.5px;letter-spacing:.11em;text-transform:uppercase;color:#9A7400}
+h2{font-size:clamp(32px,4.2vw,52px);font-weight:900;margin:12px 0 16px}
+.sub{font-size:18.5px;color:var(--mut);max-width:38em}
+
+/* Passos */
+.passos{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:52px;counter-reset:p}
+.passo{background:var(--sur);border-radius:var(--r);padding:30px 28px 32px;position:relative;counter-increment:p}
+.passo::before{content:counter(p);display:grid;place-items:center;width:46px;height:46px;border-radius:14px;background:var(--ink);color:var(--y);font-weight:900;font-size:21px;margin-bottom:22px}
+.passo h3{font-size:22px;font-weight:800;margin-bottom:9px}
+.passo p{color:#4B5563}
+
+/* Serviços */
+.serv{background:var(--sur)}
+.abas{display:inline-flex;background:#fff;border-radius:16px;padding:5px;margin-top:34px;border:1px solid var(--line)}
+.abas button{font:inherit;font-weight:800;font-size:16px;border:0;background:none;padding:11px 24px;border-radius:12px;cursor:pointer;color:var(--mut)}
+.abas button[aria-selected=true]{background:var(--ink);color:#fff}
+.grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(205px,1fr));gap:16px;margin-top:26px}
+.grade[hidden]{display:none}
+.s{background:#fff;border-radius:20px;padding:22px;border:1px solid var(--line);transition:transform .18s,box-shadow .18s,border-color .18s}
+.s:hover{transform:translateY(-4px);box-shadow:0 18px 36px rgba(20,22,26,.09);border-color:var(--y)}
+.s svg{width:58px;height:58px;margin-bottom:12px}
+.s h3{font-size:19px;font-weight:800;margin-bottom:5px;letter-spacing:-.02em}
+.s p{font-size:14.5px;color:#4B5563}
+.s small{display:inline-block;margin-top:13px;font-size:12.5px;font-weight:800;padding:5px 10px;border-radius:99px;background:var(--sur);color:#374151}
+.s small.t{background:#FFF4C2;color:#6B5200}
+
+/* Segurança */
+.seg{background:var(--ink);color:#fff;position:relative;overflow:hidden}
+.seg::before{content:"";position:absolute;inset:0;background:radial-gradient(700px 500px at 88% 0%,rgba(255,196,0,.13),transparent 62%)}
+.seg .w{position:relative}
+.seg .sob{color:var(--y)}
+.seg .sub{color:rgba(255,255,255,.68)}
+.sg{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:50px}
+.g{border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.035);border-radius:var(--r);padding:26px}
+.g.d{grid-column:span 2;background:var(--y);color:var(--ink);border:0;display:flex;flex-direction:column;justify-content:space-between;min-height:230px}
+.g .ic{width:46px;height:46px;border-radius:14px;background:rgba(255,196,0,.14);display:grid;place-items:center;margin-bottom:18px}
+.g .ic svg{width:23px;height:23px;stroke:var(--y)}
+.g.d .ic{background:var(--ink)}
+.g h3{font-size:20px;font-weight:800;margin-bottom:8px;letter-spacing:-.02em}
+.g.d h3{font-size:clamp(26px,3vw,36px);font-weight:900}
+.g p{color:rgba(255,255,255,.66);font-size:15.5px}
+.g.d p{color:#3B3200;font-size:17px;max-width:30em}
+
+/* Dois públicos */
+.duo{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+.pub{border-radius:28px;padding:40px;display:flex;flex-direction:column;align-items:flex-start}
+.pub.m{background:var(--ink);color:#fff}
+.pub.e{background:var(--sur)}
+.pub h2{font-size:clamp(28px,3.2vw,40px)}
+.pub ul{list-style:none;padding:0;margin:20px 0 32px;display:grid;gap:13px}
+.pub li{padding-left:32px;position:relative;font-size:16.5px}
+.pub li::before{content:"";position:absolute;left:0;top:3px;width:20px;height:20px;border-radius:50%;background:var(--y) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M5.5 10.5l3 3 6-7' fill='none' stroke='%2314161A' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/20px}
+.pub.m li{color:rgba(255,255,255,.84)}
+.pub .btn{margin-top:auto}
+.pub .acoes{display:flex;flex-wrap:wrap;gap:12px;margin-top:auto}
+
+/* Perguntas */
+.faq{max-width:820px;margin:44px auto 0}
+details{border-bottom:1px solid var(--line)}
+summary{list-style:none;cursor:pointer;padding:22px 44px 22px 0;font-weight:800;font-size:19px;position:relative;letter-spacing:-.01em}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"+";position:absolute;right:4px;top:15px;font-size:30px;font-weight:400;color:var(--mut);transition:transform .2s}
+details[open] summary::after{transform:rotate(45deg)}
+details p{padding:0 44px 24px 0;color:#4B5563;font-size:16.5px}
+
+/* Fecho */
+.fim{background:var(--y);text-align:center;padding:90px 0}
+.fim h2{font-size:clamp(40px,6vw,74px);margin-bottom:14px}
+.fim p{font-size:19px;color:#3B3200;margin-bottom:32px}
+.fim .cta{justify-content:center;margin:0}
+footer{background:var(--ink);color:rgba(255,255,255,.6);padding:46px 0;font-size:15px}
+footer .w{display:flex;flex-wrap:wrap;gap:18px 34px;align-items:center}
+footer .logo{font-size:21px}
+footer .logo img{width:30px;height:30px;border-radius:8px}
+footer nav{margin-left:auto;flex-wrap:wrap}
+footer small{flex-basis:100%;color:rgba(255,255,255,.4);font-size:13.5px;padding-top:18px;border-top:1px solid rgba(255,255,255,.08)}
+
+.ap{opacity:0;transform:translateY(22px);transition:opacity .6s,transform .6s}
+.ap.v{opacity:1;transform:none}
+
+@media (max-width:940px){
+  .hero .w{grid-template-columns:1fr;padding-top:52px;padding-bottom:64px}
+  .mapa{max-width:520px;width:100%;margin:0 auto}
+  header nav{display:none}
+  header .painel{margin-left:auto}
+  .passos,.sg,.duo{grid-template-columns:1fr}
+  .g.d{grid-column:auto}
+  section{padding:68px 0}
+  .pub{padding:30px 26px}
+}
+@media (max-width:480px){
+  header .painel span{display:none}
+  .cta .btn{width:100%;justify-content:center}
+  .abas{display:flex}.abas button{flex:1;padding:11px 8px}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important;scroll-behavior:auto}
+  .rota{stroke-dashoffset:0}.carro{offset-distance:100%}
+  .ap{opacity:1;transform:none;transition:none}
+  .faixa div{white-space:normal}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="w">
+    <a class="logo" href="/" aria-label="Bazá Tranquilo — início"><img src="/mark.svg" alt="" width="36" height="36">Bazá</a>
+    <nav aria-label="Secções">
+      <a href="#como">Como funciona</a>
+      <a href="#servicos">Serviços</a>
+      <a href="#seguranca">Segurança</a>
+      <a href="#motoristas">Motoristas</a>
+      <a href="#perguntas">Perguntas</a>
+    </nav>
+    <a class="painel" href="/painel" title="Painel de administração e de frotas">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+      <span>Painel</span>
+    </a>
+    <a class="btn by" href="/app/">Chamar um carro</a>
+  </div>
+</header>
+
+<main>
+<section class="hero" style="padding:0">
+  <div class="w">
+    <div>
+      <span class="tag"><i></i>Táxi, moto e carga em Angola</span>
+      <h1>Vamos bazar?<br><em>Com segurança.</em></h1>
+      <p class="lead">Peça um carro, uma moto ou uma carrinha pelo telemóvel. Vê o preço antes de pedir, acompanha o motorista no mapa e partilha a viagem com quem confia.</p>
+      <div class="cta">
+        <a class="btn by" href="/app/">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.5 3.5 3 10.6l7.5 3.3 3.3 7.5z"/></svg>
+          Chamar um carro
+        </a>
+        <a class="btn bo" href="#motoristas">Quero ser motorista</a>
+      </div>
+      <p class="nota">Funciona no navegador, sem instalar nada. Entra só com o número de telemóvel.</p>
+    </div>
+
+    <div class="mapa" role="img" aria-label="Ilustração: um carro do Bazá a seguir o percurso no mapa até ao passageiro">
+      <svg viewBox="0 0 500 525" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <path class="agua" d="M0 0h150q-30 60 10 110t-40 120q-50 40-120 20z"/>
+        <g class="quart">
+          <rect x="200" y="30" width="120" height="80" rx="10"/><rect x="345" y="30" width="130" height="80" rx="10"/>
+          <rect x="130" y="180" width="120" height="92" rx="10"/><rect x="312" y="180" width="80" height="92" rx="10"/><rect x="420" y="180" width="70" height="92" rx="10"/>
+          <rect x="20" y="330" width="46" height="96" rx="10"/><rect x="124" y="332" width="126" height="92" rx="10"/><rect x="312" y="332" width="170" height="92" rx="10"/>
+          <rect x="124" y="456" width="126" height="60" rx="10"/><rect x="312" y="456" width="170" height="60" rx="10"/>
+        </g>
+        <g class="rua">
+          <path d="M92 525V300M280 525V0M0 300h500M150 140h350M0 440h500M410 0v525" stroke-width="17"/>
+          <path d="M185 0v140M345 300v225M0 180l92 60" stroke-width="10"/>
+        </g>
+        <path class="rota" d="M92 448 L92 330 Q92 300 122 300 L250 300 Q280 300 280 270 L280 170 Q280 140 310 140 L410 140"/>
+        <!-- recolha -->
+        <circle class="pulso" cx="410" cy="140" r="14" fill="#FFC400"/>
+        <circle cx="410" cy="140" r="13" fill="#FFC400"/><circle cx="410" cy="140" r="5" fill="#14161A"/>
+        <!-- carro -->
+        <g class="carro">
+          <rect x="-19" y="-11" width="38" height="22" rx="8" fill="#fff"/>
+          <rect x="-7" y="-8" width="15" height="16" rx="4" fill="#14161A"/>
+          <rect x="13" y="-8" width="4" height="5" rx="1.5" fill="#FFC400"/><rect x="13" y="3" width="4" height="5" rx="1.5" fill="#FFC400"/>
+        </g>
+      </svg>
+      <div class="chip"><i></i>Motorista a caminho</div>
+      <div class="cartao">
+        <div class="av" aria-hidden="true">M</div>
+        <div><b>Mateus · Económico</b><span>Documentos verificados · ★ 4,9</span></div>
+        <div class="min"><span id="min" style="font-size:inherit;color:inherit">4</span><small>min</small></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="faixa" aria-hidden="true"><div>
+  <span>Moto</span><span>Triciclo</span><span>Económico</span><span>Conforto</span><span>XL</span><span>Entregas</span><span>Kupapata</span><span>Carrinha</span><span>Camião</span><span>Viagens entre municípios</span>
+  <span>Moto</span><span>Triciclo</span><span>Económico</span><span>Conforto</span><span>XL</span><span>Entregas</span><span>Kupapata</span><span>Carrinha</span><span>Camião</span><span>Viagens entre municípios</span>
+</div></div>
+
+<section id="como">
+  <div class="w">
+    <p class="sob">Como funciona</p>
+    <h2>Três toques e já está a caminho.</h2>
+    <p class="sub">Sem telefonemas, sem ficar à espera na estrada, sem surpresas no preço.</p>
+    <div class="passos">
+      <article class="passo ap"><h3>Diga para onde vai</h3><p>Escolha o ponto de recolha e o destino. Pode guardar a casa, o trabalho e os sítios onde vai sempre.</p></article>
+      <article class="passo ap"><h3>Veja o preço e peça</h3><p>O Bazá mostra o preço de cada serviço antes de pedir. Se quiser, proponha outro valor e combine com o motorista.</p></article>
+      <article class="passo ap"><h3>Acompanhe no mapa</h3><p>Vê o motorista a chegar, a matrícula e o tempo que falta. Fale com ele por mensagem ou chamada, sem mostrar o seu número.</p></article>
+    </div>
+  </div>
+</section>
+
+<section id="servicos" class="serv">
+  <div class="w">
+    <p class="sob">Serviços</p>
+    <h2>Para si, para o grupo, para a mudança.</h2>
+    <p class="sub">Da moto que fura o trânsito ao camião que leva a casa inteira.</p>
+    <div class="abas" role="tablist" aria-label="Tipo de serviço">
+      <button role="tab" aria-selected="true" aria-controls="viagens" id="t-viagens">Viagens</button>
+      <button role="tab" aria-selected="false" aria-controls="carga" id="t-carga" tabindex="-1">Carga e entregas</button>
+    </div>
+    <div class="grade" id="viagens" role="tabpanel" aria-labelledby="t-viagens">
+      <article class="s"><svg viewBox="0 0 48 48" fill="none" stroke="#14161A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="33" r="6"/><circle cx="37" cy="33" r="6"/><path d="M11 33l7-13h9l5 6h5M22 20l-3-6h-5M31 15h5l1 5" /><path d="M18 20l9 6" stroke="#FFC400"/></svg><h3>Moto</h3><p>Rápida no trânsito. Um lugar.</p><small class="t">Preço pela tarifa</small></article>
+      <article class="s"><svg viewBox="0 0 48 48" fill="none" stroke="#14161A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="35" r="5"/><circle cx="34" cy="35" r="5"/><path d="M15 35h14M6 28V17h9l4 11M19 28h23v-9a6 6 0 0 0-6-6H24v15"/><path d="M28 19h8" stroke="#FFC400"/></svg><h3>Triciclo</h3><p>Moto de três rodas. Até 3 lugares.</p><small>Preço combinado</small></article>
+      <article class="s"><svg viewBox="0 0 48 48" fill="none" stroke="#14161A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 31v-6l5-2 4-8h17l5 8 5 2v6h-4"/><path d="M17 31h14"/><circle cx="13" cy="31" r="4"/><circle cx="35" cy="31" r="4"/><path d="M17 23h14" stroke="#FFC400"/></svg><h3>Económico</h3><p>Carro acessível para o dia-a-dia. 4 lugares.</p><small class="t">Preço pela tarifa</small></article>
+      <article class="s"><svg viewBox="0 0 48 48" fill="none" stroke="#14161A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 31v-6l6-2 5-8h16l5 8 6 2v6h-4"/><path d="M17 31h14"/><circle cx="13" cy="31" r="4"/><circle cx="35" cy="31" r="4"/><path d="M24 4v5M19 6l5 3 5-3" stroke="#FFC400"/></svg><h3>Conforto</h3><p>Carro espaçoso, com ar condicionado. 4 lugares.</p><small class="t">Preço pela tarifa</small></article>
+      <article class="s"><svg viewBox="0 0 48 48" fill="none" stroke="#14161A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 32V16a3 3 0 0 1 3-3h24l9 9 4 2v8h-4"/><path d="M16 32h16"/><circle cx="12" cy="32" r="4"/><circle cx="36" cy="32" r="4"/><path d="M10 19h8M22 19h8" stroke="#FFC400"/></svg><h3>XL</h3><p>Carrinha para grupos e bagagem. 6 lugares.</p><small>Preço combinado</small></article>
+    </div>
+    <div class="grade" id="carga" role="tabpanel" aria-labelledby="t-carga" hidden>
+      <article class="s"><svg viewBox="0 0 48 48" fill="none" stroke="#14161A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="34" r="6"/><circle cx="37" cy="34" r="6"/><path d="M11 34l6-11h10l5 6h5"/><rect x="24" y="10" width="13" height="11" rx="2" stroke="#FFC400"/></svg><h3>Entrega</h3><p>Encomendas pequenas, de moto. Até 20 kg.</p><small>Preço combinado</small></article>
+      <article class="s"><svg viewBox="0 0 48 48" fill="none" stroke="#14161A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="35" r="5"/><circle cx="35" cy="35" r="5"/><path d="M14 35h16M5 28V18h8l3 10M16 28h28V16H20v12"/><path d="M26 22h12" stroke="#FFC400"/></svg><h3>Kupapata</h3><p>Triciclo de carga, com caixa. Até 500 kg.</p><small>Preço combinado</small></article>
+      <article class="s"><svg viewBox="0 0 48 48" fill="none" stroke="#14161A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 31V15h22v16M26 20h9l8 6v5h-4"/><path d="M16 31h16"/><circle cx="12" cy="32" r="4"/><circle cx="36" cy="32" r="4"/><path d="M9 21h12" stroke="#FFC400"/></svg><h3>Carrinha</h3><p>Caixa aberta ou furgão. Até 1 500 kg.</p><small>Preço combinado</small></article>
+      <article class="s"><svg viewBox="0 0 48 48" fill="none" stroke="#14161A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 32V11h25v21M28 18h9l8 8v6h-4"/><path d="M15 32h18"/><circle cx="11" cy="33" r="4"/><circle cx="37" cy="33" r="4"/><path d="M8 17h14M8 23h14" stroke="#FFC400"/></svg><h3>Camião</h3><p>Mudanças e cargas grandes. Até 8 000 kg.</p><small>Preço combinado</small></article>
+      <article class="s" style="background:var(--ink);color:#fff;border-color:var(--ink)"><svg viewBox="0 0 48 48" fill="none" stroke="#FFC400" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="16" cy="14" r="5"/><circle cx="33" cy="16" r="4"/><path d="M6 38v-5a8 8 0 0 1 8-8h4a8 8 0 0 1 8 8v5M30 26h4a7 7 0 0 1 7 7v5"/></svg><h3>Ajudantes</h3><p style="color:rgba(255,255,255,.7)">Peça até 3 ajudantes para carregar e descarregar.</p><small style="background:rgba(255,255,255,.12);color:#fff">Kupapata, carrinha e camião</small></article>
+    </div>
+  </div>
+</section>
+
+<section id="seguranca" class="seg">
+  <div class="w">
+    <p class="sob">Bazá com Segurança</p>
+    <h2>Tranquilo não é só o nome.</h2>
+    <p class="sub">A segurança está em cada passo da viagem, para quem vai sentado atrás e para quem vai ao volante.</p>
+    <div class="sg">
+      <article class="g d ap">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.4 8-8 9-4.600-1-8-4-8-9V6z"/><path d="M8.500 12l2.500 2.500 4.500-5"/></svg></div>
+        <div><h3>Sabe sempre quem o vem buscar.</h3><p>Cada motorista envia a carta de condução, o livrete, o título de propriedade e o seguro da viatura. A equipa do Bazá revê tudo antes de ele poder conduzir.</p></div>
+      </article>
+      <article class="g ap"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="12" r="2.500"/><circle cx="18" cy="6" r="2.500"/><circle cx="18" cy="18" r="2.500"/><path d="M8.200 10.900l7.600-3.800M8.200 13.100l7.600 3.800"/></svg></div><h3>Partilhe a viagem</h3><p>Envie um link à família: seguem a viagem no mapa, no navegador, sem instalar nada.</p></article>
+      <article class="g ap"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v5M12 16.500v.100"/><path d="M10.300 3.900L2.600 17.200A2 2 0 0 0 4.300 20.200h15.400a2 2 0 0 0 1.700-3L13.700 3.900a2 2 0 0 0-3.400 0z"/></svg></div><h3>Botão SOS</h3><p>Em caso de perigo, um toque liga para a emergência, regista o alerta e avisa o seu contacto de confiança.</p></article>
+      <article class="g ap"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h4l2 5-2.500 1.500a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></svg></div><h3>O seu número fica consigo</h3><p>Mensagens e chamadas com o motorista dentro do Bazá, sem mostrar o seu número de telefone.</p></article>
+      <article class="g ap"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.700 5.600 6.100.900-4.400 4.300 1 6.100L12 17l-5.400 2.900 1-6.100L3.200 9.500l6.100-.900z"/></svg></div><h3>Avaliação e preferidos</h3><p>Avalie cada viagem e guarde os motoristas de quem gostou, para os chamar de novo.</p></article>
+    </div>
+  </div>
+</section>
+
+<section id="motoristas">
+  <div class="w duo">
+    <div class="pub m ap">
+      <p class="sob" style="color:var(--y)">Para motoristas</p>
+      <h2>Conduza com o Bazá.</h2>
+      <ul>
+        <li>Fica online quando quer e recebe pedidos perto de si.</li>
+        <li>Moto, triciclo, carro, carrinha ou camião: até 5 viaturas na mesma conta.</li>
+        <li>Publique viagens entre municípios, com dia, hora e lugares.</li>
+        <li>Navegação até ao passageiro e ao destino, e as suas contas sempre à vista.</li>
+      </ul>
+      <a class="btn by" href="/app/">Registar-me como motorista</a>
+    </div>
+    <div class="pub e ap" id="empresas">
+      <p class="sob">Para frotas e empresas</p>
+      <h2>A sua frota num só painel.</h2>
+      <ul>
+        <li>Acompanhe os seus motoristas no mapa, as corridas e a facturação.</li>
+        <li>Viaturas, turnos, despesas e acertos com cada motorista.</li>
+        <li>Empresas: os colaboradores viajam por conta da empresa e a conta chega no fim do mês.</li>
+      </ul>
+      <div class="acoes">
+        <a class="btn bi" href="/painel">Abrir o painel</a>
+        <a class="btn bl" href="/painel">Registar a minha frota</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="perguntas" style="background:var(--sur)">
+  <div class="w">
+    <p class="sob" style="text-align:center">Perguntas frequentes</p>
+    <h2 style="text-align:center">Antes de bazar.</h2>
+    <div class="faq">
+      <details open><summary>Como peço uma corrida no Bazá?</summary><p>Abra o Bazá, entre com o seu número de telemóvel, escolha o ponto de recolha e o destino, veja o preço de cada serviço e toque em pedir. Acompanha o motorista no mapa até ele chegar.</p></details>
+      <details><summary>Preciso de instalar alguma coisa?</summary><p>Não. O Bazá funciona no navegador do telemóvel ou do computador: basta tocar em «Chamar um carro».</p></details>
+      <details><summary>Como pago a corrida?</summary><p>Em dinheiro, directamente ao motorista, no fim da viagem. Colaboradores de empresas clientes podem viajar por conta da empresa.</p></details>
+      <details><summary>Posso negociar o preço?</summary><p>Sim. Nas corridas de moto e de carro pode propor um preço diferente do da tarifa, e o motorista aceita ou responde com outro. No triciclo, no XL e nos serviços de carga o preço é sempre combinado entre o cliente e o motorista.</p></details>
+      <details><summary>Como me torno motorista do Bazá?</summary><p>Crie uma conta de motorista, registe a carta de condução e a viatura e envie as fotografias dos documentos: carta, livrete, título de propriedade e seguro. Depois de a equipa os rever, pode ficar online e receber pedidos.</p></details>
+      <details><summary>Onde funciona o Bazá?</summary><p>Em Angola, onde houver motoristas do Bazá online perto de si. Entre municípios, há viagens com dia, hora e lugares marcados.</p></details>
+    </div>
+  </div>
+</section>
+
+<section class="fim">
+  <div class="w">
+    <h2>Vamos bazar?</h2>
+    <p>O seu próximo carro está a um toque.</p>
+    <div class="cta">
+      <a class="btn bi" href="/app/">Chamar um carro</a>
+      <a class="btn bl" href="/painel">Painel de administração</a>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="w">
+    <a class="logo" href="/"><img src="/mark.svg" alt="" width="30" height="30">Bazá</a>
+    <span>Bazá Tranquilo · Bazá com Segurança</span>
+    <nav aria-label="Rodapé">
+      <a href="/app/">Abrir o Bazá</a>
+      <a href="/painel">Painel</a>
+      <a href="/termos">Termos de Utilização</a>
+      <a href="/privacidade">Política de Privacidade</a>
+    </nav>
+    <small>© <span id="ano">2026</span> Bazá Tranquilo. Dados do mapa © contribuidores do OpenStreetMap.</small>
+  </div>
+</footer>
+
+<script>
+// Separadores dos serviços.
+(function () {
+  var tabs = [].slice.call(document.querySelectorAll('[role=tab]'));
+  function pick(t) {
+    tabs.forEach(function (o) {
+      var on = o === t;
+      o.setAttribute('aria-selected', on);
+      o.tabIndex = on ? 0 : -1;
+      document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+    });
+  }
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { pick(t); });
+    t.addEventListener('keydown', function (e) {
+      if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+      var n = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+      pick(n); n.focus();
+    });
+  });
+})();
+// Minutos do cartão, a par com a animação do carro (9 s por volta).
+(function () {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) { document.getElementById('min').textContent = '1'; return; }
+  var el = document.getElementById('min'), t0 = performance.now();
+  setInterval(function () {
+    var p = ((performance.now() - t0) % 9000) / 9000;
+    el.textContent = p > 0.62 ? '✓' : Math.max(1, Math.ceil(4 * (1 - p / 0.62)));
+    el.parentNode.lastElementChild.textContent = p > 0.62 ? 'chegou' : 'min';
+  }, 250);
+})();
+// Entrada suave das secções.
+(function () {
+  var els = document.querySelectorAll('.ap');
+  if (!('IntersectionObserver' in window)) { els.forEach(function (e) { e.classList.add('v'); }); return; }
+  var io = new IntersectionObserver(function (es) {
+    es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('v'); io.unobserve(e.target); } });
+  }, { rootMargin: '0px 0px -8% 0px' });
+  els.forEach(function (e) { io.observe(e); });
+})();
+document.getElementById('ano').textContent = new Date().getFullYear();
+</script>
+</body>
+</html>
