@@ -155,7 +155,7 @@ Antes da primeira publicação na Play Store:
 
 - **Assinatura:** a chave de loja já existe: `app/android/app/baza-upload.jks`, com a palavra-passe em `app/android/key.properties`. Os dois ficheiros estão fora do git e **só existem no computador de desenvolvimento**: guardar uma cópia de ambos em local seguro (por exemplo, um gestor de palavras-passe e um disco externo). Sem eles não se publicam actualizações do app. Na Play Console, activar o "Play App Signing" para a Google guardar a chave final.
 - **Versão:** subir `version:` no `pubspec.yaml` a cada publicação.
-- **Ficha da loja:** endereços dos Termos e da Política de Privacidade (secção 5), e a declaração de uso de localização em segundo plano (motoristas).
+- **Ficha da loja:** textos prontos em `PLAY_STORE.md` (ficha, endereços dos Termos e da Política de Privacidade, declarações dos serviços em primeiro plano de localização e microfone, segurança dos dados). O app não pede `ACCESS_BACKGROUND_LOCATION`, por isso não há declaração de localização em segundo plano.
 - A versão web, se for usada: `flutter build web --release --dart-define=API_URL=https://api.baza.ao` e servir `app/build/web` por HTTPS.
 
 ### Definições a fazer no painel depois de instalar
@@ -169,19 +169,19 @@ Antes da primeira publicação na Play Store:
 
 ### Permissões Android do app
 
-Além da localização, notificações e microfone (chamadas), o app declara `FOREGROUND_SERVICE_MICROPHONE` e o serviço `AlertAudioService`, usados só para partilhar o som da viagem durante um alerta de perigo. Na ficha da Play Store é preciso justificar este uso ("gravação de áudio iniciada pelo utilizador numa emergência") e mostrar um vídeo curto da função.
+Além da localização, notificações e microfone (chamadas), o app pode declarar `FOREGROUND_SERVICE_MICROPHONE` e o serviço `AlertAudioService`, usados só para partilhar o som da viagem durante um alerta de perigo. **Desligado desde 2026-11-26 (decisão do dono):** os dois estão comentados no `AndroidManifest.xml`, o app esconde o botão e o servidor responde 403 (`ALERT_AUDIO_ENABLED`, por omissão desligado; os Termos e a Política só falam do som com ele ligado). O SOS continua. Para ligar: `ALERT_AUDIO_ENABLED=true` no `.env` e reiniciar a API, repor as duas linhas no manifesto, publicar nova versão do app e, na Play Store, justificar o uso ("gravação de áudio iniciada pelo utilizador numa emergência", texto em `PLAY_STORE.md` › 2.2) com um vídeo curto.
 
 ## 8. Pontos em aberto antes de lançar
 
 | Ponto | Situação | O que fazer |
 |---|---|---|
-| Chamadas no app em dados móveis | Só há STUN público; em muitas redes a chamada não liga | Instalar um servidor TURN (ex.: coturn) e preencher `TURN_*` |
+| Chamadas no app em dados móveis | ✅ TURN próprio (coturn) desde 2026-11-26 — ver «Instalação em bazatranquilo.com» | Testar uma chamada real entre dois telemóveis em dados móveis |
 | Crédito do mapa | A licença do OpenStreetMap obriga a indicá-lo | Manter o ícone "ⓘ" no mapa e a secção "Mapas" nos Termos |
-| Texto legal | Rascunho | Revisão por um advogado |
-| Cobrança de comissões e mensalidades | Registadas e pagas fora do app; o motorista comunica o pagamento e a equipa confirma no painel | Definir `COMMISSION_PAY_INFO`; mais tarde, ligar um pagamento electrónico que confirme sozinho |
+| Texto legal | Definitivo (dono, 2026-11-26, sem advogado) | Empresa: Luzingu (`LEGAL_ENTITY`) |
+| Cobrança de comissões e mensalidades | Registadas e pagas fora do app; o motorista comunica o pagamento e a equipa confirma no painel | `COMMISSION_PAY_INFO` definido (IBAN da Luzingu, 2026-11-26); mais tarde, ligar um pagamento electrónico que confirme sozinho |
 | Pagamentos electrónicos | Simulados | Contratos com Multicaixa Express / Unitel Money / Afrimoney |
 | Locais fora de Luanda | Poucos pontos no mapa aberto | Registar no painel › Locais e nomear utilizadores estrela |
-| iPhone | Nunca compilado | Ver secção 10 |
+| iPhone | Fica para depois (dono, 2026-11-26): usa-se a versão web | Ver secção 10 |
 
 ## 9. Manutenção
 
@@ -235,6 +235,7 @@ Primeira instalação real, no servidor Serve1 da Luzingu (o mesmo do AngoSchool
 | API | serviço `baza` (systemd), utilizador `baza`, `HOST=127.0.0.1` no `.env` para não escutar para fora |
 | Base de dados | **MongoDB do AngoSchool** (porta 27019, replicado para o Serve2), base `baza`, utilizador `baza` próprio (decisão do dono). A base de teste é `baza_teste`, com o mesmo utilizador |
 | Mapas | `mapas/.env` com `MAPA_PORT=8088` (a 8080 é do Nginx neste servidor); `TILE_UPSTREAM` aponta para a 8088 |
+| TURN (chamadas) | coturn em Docker (`turn/docker-compose.yml`, contentor `baza-turn`, rede do anfitrião). Portas **3479** udp/tcp, **5350** TLS e relay **41000–41100/udp**, abertas na UFW — as habituais (3478, 5349, 40000+) são do LiveKit do AngoSchool. Configuração com a senha fora do git: `/etc/coturn-baza/turnserver.conf` (= `TURN_PASSWORD` no `.env`; mudar as duas). Certificado copiado para `/etc/coturn-baza/certs` pelo gancho `/etc/letsencrypt/renewal-hooks/deploy/baza-turn-certificado.sh`, que reinicia o contentor. Recusa reencaminhar para redes internas e para o próprio servidor (`denied-peer-ip`). Sem `user-quota`: todos os telemóveis usam o mesmo utilizador `baza`. Instalado em Docker porque o `apt` do servidor tem dependências partidas (o `--fix-broken` actualizaria 138 pacotes, incluindo o `systemd`) |
 | Administrador do painel | `admin@bazatranquilo.com`; a senha inicial está em `ADMIN_PASSWORD` no `backend/.env` — trocar no painel |
 | Cópia do `.env` original | `/root/baza-env-original-20261122.bak` (o que veio do computador de desenvolvimento) |
 
@@ -266,5 +267,8 @@ Por fazer nesta instalação:
 - Registar o domínio na Google Search Console e enviar o `sitemap.xml`.
 
 - Cópia de segurança da base `baza` (o `/root/backup_mega.sh` só leva as bases do AngoSchool).
-- Servidor TURN, conta de SMS e caixa de e-mail próprias, `LEGAL_ENTITY`/`SUPPORT_*` e `COMMISSION_PAY_INFO` (ver secções 4 e 8).
+- Conta de SMS e caixa de e-mail próprias (ver secções 4 e 8).
+- ✅ 2026-11-26: servidor TURN (coturn) — testado com `turnutils_uclient` por UDP, TCP e TLS. Testar o TURN: `docker run --rm --network host --entrypoint turnutils_uclient coturn/coturn:4.6 -v -p 3479 -u baza -w <senha> -e 8.8.8.8 -n 1 -m 1 213.136.68.153` (deve dar «Received relay addr» e «success»). Registo: `docker logs baza-turn`.
+- ✅ 2026-11-26: `LEGAL_ENTITY`, `SUPPORT_EMAIL`, `SUPPORT_PHONE` e `COMMISSION_PAY_INFO` com os dados da Luzingu (o Bazá é gerido pela equipa do AngoSchool). Cópia do `.env` anterior: `/root/baza-env-antes-dados-empresa-20261126.bak`.
+- Textos para a Google Play Console (ficha, serviços em primeiro plano, segurança dos dados): `PLAY_STORE.md`.
 - O *lint* das versões release está desligado em `app/android/build.gradle.kts` porque rebenta com o JDK 17; com JDK 21 pode voltar a ligar-se.

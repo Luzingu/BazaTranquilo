@@ -121,6 +121,15 @@ export const config = {
    */
   walletEnabled: env.WALLET_ENABLED === 'true',
 
+  /**
+   * Partilha do som da viagem num alerta de perigo. Desligada por enquanto
+   * (decisão do dono, 2026-11-26): o SOS funciona, mas o app não mostra o
+   * botão do som e o servidor recusa recebê-lo. Liga-se com
+   * ALERT_AUDIO_ENABLED=true — e, para gravar com o ecrã bloqueado, é preciso
+   * repor o serviço AlertAudioService no AndroidManifest.xml (ver PRODUCAO.md).
+   */
+  alertAudioEnabled: env.ALERT_AUDIO_ENABLED === 'true',
+
   currency: 'AOA',
   /** Parte de cada corrida que fica com a plataforma. */
   commissionRate: 0.15,

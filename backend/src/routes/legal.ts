@@ -5,14 +5,13 @@ import { config } from '../config.js';
 // Páginas públicas de Termos de Utilização e Política de Privacidade. O app
 // abre-as no navegador, e são os endereços a indicar nas lojas de aplicações.
 //
-// ATENÇÃO: o texto foi escrito para o Bazá seguindo a estrutura habitual dos
-// termos das aplicações de transporte (definições, papel de intermediário,
-// conta, preços, cancelamentos, regras, responsabilidade, privacidade), mas
-// não é um parecer jurídico. Deve ser revisto por um advogado antes do
-// lançamento. Os números (minutos, cancelamentos) vêm de config.ts, para o
-// texto dizer sempre o que o sistema faz.
+// Texto definitivo (decisão do dono, 2026-11-26: não passa por advogado). A
+// empresa responsável e os contactos vêm de LEGAL_ENTITY e SUPPORT_* no .env
+// (a Luzingu, que gere o Bazá); os números (minutos, cancelamentos) vêm de
+// config.ts, para o texto dizer sempre o que o sistema faz. Mudar o texto de
+// forma importante obriga a subir UPDATED (secção "Alterações aos Termos").
 
-const UPDATED = '24 de Novembro de 2026';
+const UPDATED = '26 de Novembro de 2026';
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 function contact() {
@@ -158,7 +157,7 @@ const terms = () => {
 
 <h2>11. Segurança</h2>
 <ul>
-<li>A Aplicação tem um botão SOS, o alerta de perigo às autoridades (que passam a acompanhar a viagem e, se o utilizador o activar, a ouvir o som da viatura) e a partilha da viagem com pessoas de confiança. Quem viaja com um utilizador do Bazá aceita que, num alerta de perigo, o som da viatura possa ser partilhado com a polícia. Estas funções são uma ajuda e <b>não substituem os serviços de emergência</b>: em caso de perigo, ligue para o ${esc(config.emergencyNumber)}.</li>
+<li>A Aplicação tem um botão SOS, o alerta de perigo às autoridades (que passam a acompanhar a viagem${config.alertAudioEnabled ? ' e, se o utilizador o activar, a ouvir o som da viatura' : ''}) e a partilha da viagem com pessoas de confiança.${config.alertAudioEnabled ? ' Quem viaja com um utilizador do Bazá aceita que, num alerta de perigo, o som da viatura possa ser partilhado com a polícia.' : ''} Estas funções são uma ajuda e <b>não substituem os serviços de emergência</b>: em caso de perigo, ligue para o ${esc(config.emergencyNumber)}.</li>
 <li>O chat e as chamadas entre Passageiro e Motorista servem apenas para combinar o serviço.</li>
 <li>Qualquer incidente deve ser comunicado ao Bazá em "Ajuda e suporte" e, quando for caso disso, às autoridades.</li>
 </ul>
@@ -217,7 +216,7 @@ const privacy = () => {
 <li><b>Localização:</b> a posição do passageiro quando tem a aplicação aberta, para sugerir o ponto de recolha e mostrar o mapa; a posição do motorista enquanto está online e durante as corridas, <b>incluindo com a aplicação em segundo plano ou com o ecrã bloqueado</b>, para receber pedidos e para o passageiro acompanhar a viagem. Fora desses períodos, a posição do motorista não é recolhida.</li>
 <li><b>Corridas e viagens:</b> pontos de recolha e destino, paragens, percurso, horas, preço, forma de pagamento, descrição da carga, propostas de preço, reservas de lugares, avaliações, locais guardados e motoristas preferidos.</li>
 <li><b>Comunicações:</b> mensagens trocadas no chat da corrida e pedidos enviados ao suporte. As chamadas de voz feitas na aplicação <b>não são gravadas</b>.</li>
-<li><b>Segurança:</b> alertas de perigo (com a posição no momento), ligações de partilha de viagem que criar e, <b>só se o activar durante um alerta</b>, o som captado pelo microfone do seu telemóvel, enviado em blocos de poucos segundos.</li>
+<li><b>Segurança:</b> alertas de perigo (com a posição no momento), ligações de partilha de viagem que criar${config.alertAudioEnabled ? ' e, <b>só se o activar durante um alerta</b>, o som captado pelo microfone do seu telemóvel, enviado em blocos de poucos segundos' : ''}.</li>
 <li><b>Locais registados:</b> se for um utilizador autorizado a registar locais no mapa, o nome e a posição desses locais, associados à sua conta.</li>
 <li><b>Dados técnicos:</b> identificador do dispositivo para as notificações, endereço IP e registos de acesso necessários ao funcionamento e à segurança do serviço.</li>
 </ul>
@@ -241,7 +240,7 @@ const privacy = () => {
 <li><b>Contacto de emergência:</b> se accionar o SOS e escolher enviar-lhe a sua viagem.</li>
 <li><b>Frotas:</b> se um motorista pertencer a uma frota, o gestor da frota vê os seus dados profissionais, a sua posição quando está online e as suas corridas.</li>
 <li><b>Prestadores de serviços</b> que trabalham por nossa conta: envio de SMS e de e-mail, alojamento dos servidores e envio de notificações (Google Firebase). Só recebem o necessário para a função e não podem usar os dados para outros fins. Alguns destes prestadores têm servidores fora de Angola; nesses casos, a transferência é feita com as garantias exigidas pela lei.</li>
-<li><b>Polícia, quando acciona o alerta de perigo:</b> os agentes dos postos policiais mais próximos, registados no Bazá, vêem a sua viagem enquanto o alerta estiver aberto — o seu nome e telefone, os do motorista ou passageiro que vai consigo, a viatura, o percurso e a posição actual — e ouvem o som, se o partilhar. Deixam de ter acesso quando o alerta é fechado, e cada acesso fica registado. Fora de um alerta, a polícia não consulta dados no Bazá.</li>
+<li><b>Polícia, quando acciona o alerta de perigo:</b> os agentes dos postos policiais mais próximos, registados no Bazá, vêem a sua viagem enquanto o alerta estiver aberto — o seu nome e telefone, os do motorista ou passageiro que vai consigo, a viatura, o percurso e a posição actual${config.alertAudioEnabled ? ' — e ouvem o som, se o partilhar' : ''}. Deixam de ter acesso quando o alerta é fechado, e cada acesso fica registado. Fora de um alerta, a polícia não consulta dados no Bazá.</li>
 <li><b>Pessoa de confiança, quando acciona o alerta de perigo:</b> se o seu contacto de emergência tiver conta no Bazá, vê e ouve o mesmo que a polícia, enquanto o alerta estiver aberto.</li>
 <li><b>Outras autoridades:</b> quando a lei o exigir ou mediante pedido válido de uma autoridade competente.</li>
 </ul>
@@ -253,7 +252,7 @@ const privacy = () => {
 <li>Os códigos de confirmação por SMS expiram em minutos.</li>
 <li>Da posição do motorista em tempo real guarda-se apenas a mais recente, enquanto está online; de cada corrida ficam registados os pontos e o percurso.</li>
 <li>O registo das corridas e das viagens (datas, percurso, preço) e as contas com os motoristas são conservados depois de a conta ser eliminada, sem ligação ao seu nome, telefone ou fotografia, pelo prazo exigido pelas obrigações legais e para a contabilidade do outro interveniente.</li>
-<li>Os pedidos de suporte e os alertas de perigo são conservados pelo tempo necessário para tratar o caso e para defesa em eventuais litígios. O som partilhado num alerta é apagado 30 dias depois de o alerta ser fechado.</li>
+<li>Os pedidos de suporte e os alertas de perigo são conservados pelo tempo necessário para tratar o caso e para defesa em eventuais litígios.${config.alertAudioEnabled ? ' O som partilhado num alerta é apagado 30 dias depois de o alerta ser fechado.' : ''}</li>
 </ul>
 
 <h2>5. Os seus direitos</h2>

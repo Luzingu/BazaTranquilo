@@ -107,6 +107,8 @@ const MAX_AUDIO_CHUNKS = 450;
  * um bloco WAV de poucos segundos.
  */
 safetyRouter.put('/:id/sos/audio', express.raw({ type: () => true, limit: '600kb' }), async (req, res) => {
+  // 403 antes de 409: o app pára de gravar e não tenta de novo.
+  if (!config.alertAudioEnabled) throw new HttpError(403, 'A partilha do som está desligada.');
   const id = parse(z.string().regex(/^[0-9a-f]{24}$/i), req.params.id);
   const alert = await SosAlertModel.findOne({ ride: id, user: req.account._id, status: { $ne: 'closed' } });
   // 409: o app pára de gravar (alerta fechado ou cancelado).

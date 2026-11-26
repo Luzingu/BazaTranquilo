@@ -141,6 +141,7 @@ class User {
     this.hasPassword = false,
     this.phoneVerified = true,
     this.walletEnabled = false,
+    this.alertAudioEnabled = false,
     this.star = false,
     this.emergencyName,
     this.emergencyPhone,
@@ -169,6 +170,10 @@ class User {
 
   /// Se a carteira está disponível no app (pode estar desligada no servidor).
   final bool walletEnabled;
+
+  /// Se o alerta de perigo mostra "Partilhar o som da viagem" (desligado no
+  /// servidor por enquanto: ALERT_AUDIO_ENABLED).
+  final bool alertAudioEnabled;
 
   /// Utilizador estrela: pode registar locais no mapa.
   final bool star;
@@ -211,6 +216,7 @@ class User {
     hasPassword: j['hasPassword'] as bool? ?? false,
     phoneVerified: j['phoneVerified'] as bool? ?? true,
     walletEnabled: j['walletEnabled'] as bool? ?? false,
+    alertAudioEnabled: j['alertAudioEnabled'] as bool? ?? false,
     star: j['star'] as bool? ?? false,
     emergencyName:
         (j['emergencyContact'] as Map<String, dynamic>?)?['name'] as String?,

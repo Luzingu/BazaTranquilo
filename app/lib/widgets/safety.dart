@@ -331,40 +331,42 @@ class _SosSheetState extends State<_SosSheet> {
                         ),
                       ],
                     ),
-                    // Som da viagem: só se partilha se a pessoa o ligar aqui.
-                    ListenableBuilder(
-                      listenable: AlertAudio.instance,
-                      builder: (context, _) {
-                        final audio = AlertAudio.instance;
-                        final on = audio.rideId == widget.ride.id;
-                        return SwitchListTile(
-                          contentPadding: EdgeInsets.zero,
-                          value: on,
-                          onChanged: (v) => v
-                              ? audio.start(
-                                  context.read<Session>().api,
-                                  widget.ride.id,
-                                )
-                              : audio.stop(),
-                          secondary: Icon(
-                            on ? Icons.mic : Icons.mic_none,
-                            color: on ? BazaColors.red : BazaColors.muted,
-                          ),
-                          title: const Text(
-                            'Partilhar o som da viagem',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          subtitle: Text(
-                            audio.problem ??
-                                (on
-                                    ? (audio.background
-                                          ? 'A polícia e o seu contacto de confiança ouvem o que se passa na viatura. Pode bloquear o telemóvel: continua a gravar.'
-                                          : 'A polícia e o seu contacto de confiança ouvem o que se passa na viatura. Mantenha o Bazá aberto.')
-                                    : 'A polícia e o seu contacto de confiança (se tiver o Bazá) ouvem o que se passa na viatura.'),
-                          ),
-                        );
-                      },
-                    ),
+                    // Som da viagem: só se partilha se a pessoa o ligar aqui,
+                    // e só aparece com a partilha ligada no servidor.
+                    if (user?.alertAudioEnabled ?? false)
+                      ListenableBuilder(
+                        listenable: AlertAudio.instance,
+                        builder: (context, _) {
+                          final audio = AlertAudio.instance;
+                          final on = audio.rideId == widget.ride.id;
+                          return SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            value: on,
+                            onChanged: (v) => v
+                                ? audio.start(
+                                    context.read<Session>().api,
+                                    widget.ride.id,
+                                  )
+                                : audio.stop(),
+                            secondary: Icon(
+                              on ? Icons.mic : Icons.mic_none,
+                              color: on ? BazaColors.red : BazaColors.muted,
+                            ),
+                            title: const Text(
+                              'Partilhar o som da viagem',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                            subtitle: Text(
+                              audio.problem ??
+                                  (on
+                                      ? (audio.background
+                                            ? 'A polícia e o seu contacto de confiança ouvem o que se passa na viatura. Pode bloquear o telemóvel: continua a gravar.'
+                                            : 'A polícia e o seu contacto de confiança ouvem o que se passa na viatura. Mantenha o Bazá aberto.')
+                                      : 'A polícia e o seu contacto de confiança (se tiver o Bazá) ouvem o que se passa na viatura.'),
+                            ),
+                          );
+                        },
+                      ),
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton(

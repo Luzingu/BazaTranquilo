@@ -112,7 +112,8 @@ class AlertAudio extends ChangeNotifier {
         notifyListeners();
       } on ApiException catch (e) {
         // 409: o alerta foi fechado ou cancelado — já não há a quem enviar.
-        if (e.status == 409) await stop();
+        // 403: a partilha do som foi desligada no servidor.
+        if (e.status == 409 || e.status == 403) await stop();
       } catch (_) {
         // Falha de rede: este bloco perde-se; os seguintes continuam.
       }

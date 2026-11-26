@@ -9,7 +9,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
     <!-- Alerta de perigo: o som da viagem continua a ser partilhado com o ecrã bloqueado. -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
+    <!-- Som da viagem num alerta: desligado por enquanto (2026-11-26). Para o ligar,
+         repor esta permissão e o serviço AlertAudioService mais abaixo.
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/> -->
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <!-- Avisos de novas corridas, chamadas e mensagens. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
@@ -40,10 +42,11 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Desligado por enquanto (2026-11-26), ver a permissão acima.
         <service
             android:name=".AlertAudioService"
             android:exported="false"
-            android:foregroundServiceType="microphone" />
+            android:foregroundServiceType="microphone" /> -->
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

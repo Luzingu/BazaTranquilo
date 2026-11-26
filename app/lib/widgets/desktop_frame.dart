@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../core/theme.dart';
 import 'common.dart';
+import 'made_by.dart';
 
 /// Versão para computador: em ecrãs largos, o app inteiro (ecrãs, janelas e
 /// painéis inferiores) fica numa "janela" centrada com as medidas de um
@@ -165,6 +166,16 @@ class _BrandPanel extends StatelessWidget {
           const _BrandPoint(
             icon: Icons.payments_outlined,
             text: 'Preço à vista antes de pedir',
+          ),
+          const SizedBox(height: 36),
+          Text(
+            madeBy,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.5),
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.3,
+            ),
           ),
         ],
       ),

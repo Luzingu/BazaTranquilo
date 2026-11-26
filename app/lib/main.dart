@@ -13,6 +13,7 @@ import 'services/notifier.dart';
 import 'state/session.dart';
 import 'widgets/common.dart';
 import 'widgets/desktop_frame.dart';
+import 'widgets/made_by.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -39,8 +40,9 @@ class BazaApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: bazaTheme(),
       // No computador, o app aparece numa janela centrada (ver DesktopFrame).
+      // O selo "Criado por Luzingu Tech" fica por cima de todas as telas.
       builder: (context, child) =>
-          DesktopFrame(child: child ?? const SizedBox()),
+          DesktopFrame(child: MadeBySeal(child: child ?? const SizedBox())),
       home: const _Root(),
     );
   }

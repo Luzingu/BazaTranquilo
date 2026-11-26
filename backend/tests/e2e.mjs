@@ -927,7 +927,7 @@ if (await fetch(`${B}/health`).then(() => true).catch(() => false)) {
 await mongoose.connect(DB);
 await mongoose.connection.dropDatabase();
 const server = spawn('npx', ['tsx', 'src/index.ts'], {
-  env: { ...process.env, PORT: String(PORT), MONGODB_URI: DB, JWT_SECRET: TEST_JWT_SECRET, NODE_ENV: 'development', ADMIN_EMAIL: '', ADMIN_PASSWORD: '', WALLET_ENABLED: 'false', AUTO_APPROVE_DOCUMENTS: 'true', SMS_PROVIDER: 'console', SMS_FAIL_NUMBERS: '+244923000790,+244923000792,+244923000794', TELCOSMS_API_KEY: '', MAIL_TRANSPORT: 'console', TILE_UPSTREAM: '', FIREBASE_KEY_FILE: '' },
+  env: { ...process.env, PORT: String(PORT), MONGODB_URI: DB, JWT_SECRET: TEST_JWT_SECRET, NODE_ENV: 'development', ADMIN_EMAIL: '', ADMIN_PASSWORD: '', WALLET_ENABLED: 'false', ALERT_AUDIO_ENABLED: 'true', AUTO_APPROVE_DOCUMENTS: 'true', SMS_PROVIDER: 'console', SMS_FAIL_NUMBERS: '+244923000790,+244923000792,+244923000794', TELCOSMS_API_KEY: '', MAIL_TRANSPORT: 'console', TILE_UPSTREAM: '', FIREBASE_KEY_FILE: '' },
   stdio: ['ignore', 'pipe', 'pipe'],
   // Grupo de processos próprio: no fim mata-se o grupo todo (o npx lança o
   // servidor noutro processo, que sobrevivia e era apanhado pela corrida seguinte).

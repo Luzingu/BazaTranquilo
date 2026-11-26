@@ -1,0 +1,18 @@
+# Servidor TURN do Bazá (coturn) — para as chamadas no app ligarem em dados móveis.
+# A configuração, com a senha, está FORA do git: /etc/coturn-baza/turnserver.conf.
+# O certificado é copiado para /etc/coturn-baza/certs pelo gancho do certbot
+# /etc/letsencrypt/renewal-hooks/deploy/baza-turn-certificado.sh.
+# Arrancar/actualizar: cd /var/www/BazaTranquilo/turn && docker compose up -d
+services:
+  baza-turn:
+    image: coturn/coturn:4.6
+    container_name: baza-turn
+    network_mode: host
+    restart: unless-stopped
+    command: ["-c", "/etc/coturn/turnserver.conf"]
+    volumes:
+      - /etc/coturn-baza/turnserver.conf:/etc/coturn/turnserver.conf:ro
+      - /etc/coturn-baza/certs:/certs:ro
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }

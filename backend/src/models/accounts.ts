@@ -300,6 +300,8 @@ export function publicAccount(role: Role, a: AccountDoc) {
     walletBalance: a.walletBalance,
     /** Se a carteira está disponível no app. */
     walletEnabled: config.walletEnabled,
+    /** Se o app mostra "Partilhar o som da viagem" no alerta de perigo. */
+    alertAudioEnabled: config.alertAudioEnabled,
     rating: rating(a),
     /** Suspensão temporária por cancelamentos repetidos (data ISO) ou null. */
     suspendedUntil: a.suspendedUntil && a.suspendedUntil.getTime() > Date.now() ? a.suspendedUntil : null,

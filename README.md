@@ -203,7 +203,7 @@ Os dados do OpenStreetMap são pobres fora de Luanda (ex.: ~430 locais no Zaire 
 
 ## Termos, privacidade e eliminação de conta
 
-- Páginas públicas `GET /termos` e `GET /privacidade` (texto em `backend/src/routes/legal.ts`; nome da empresa e contactos em `LEGAL_ENTITY`, `SUPPORT_EMAIL`, `SUPPORT_PHONE`). O texto é um rascunho: deve ser revisto por um advogado.
+- Páginas públicas `GET /termos` e `GET /privacidade` (texto em `backend/src/routes/legal.ts`; nome da empresa e contactos em `LEGAL_ENTITY`, `SUPPORT_EMAIL`, `SUPPORT_PHONE`). Texto definitivo (2026-11-26).
 - `DELETE /me` elimina a conta: apaga dados pessoais, fotos, documentos e mensagens; as corridas ficam sem ligação à pessoa. No app: Os meus dados › Eliminar conta.
 
 ## Acompanhamento em tempo real

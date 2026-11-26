@@ -69,6 +69,7 @@ Detalhes, comandos e tabelas em `PRODUCAO.md`. A instalação num servidor real 
 - **Computador:** em ecrãs com 900 px ou mais, o app inteiro aparece numa janela centrada de 460 px (`app/lib/widgets/desktop_frame.dart`, ligada em `MaterialApp.builder`), com o painel da marca à esquerda a partir de 1100 px. Os ecrãs continuam a ser os do telemóvel: não desenhar variantes largas ecrã a ecrã.
 - **Nenhuma janela fecha ao tocar fora dela:** `showDialog(barrierDismissible: false)` e `showModalBottomSheet(isDismissible: false, showDragHandle: true)`. Toda a janela tem de ter forma de fechar (botão; nos painéis inferiores, também a pega).
 - **Enter submete sempre o formulário** (`onSubmitted` → acção principal).
+- **Selo de autoria** (decidido pelo utilizador, 2026-11-24): "Criado por Luzingu Tech" em todas as telas, discreto no canto de baixo (`app/lib/widgets/made_by.dart`, ligado em `MaterialApp.builder`, por isso as telas novas já o têm; não recebe toques e esconde-se com o teclado aberto). No computador aparece também no painel da marca. O texto está na constante `madeBy`.
 - **Pensar em quem tem pouca prática com o telemóvel** (decidido pelo utilizador, 2026-11-24): ícones grandes e com cor ao lado do texto, ajudas que dizem o que falta. Campos de número de telefone: usar **sempre** `PhoneField` (`app/lib/widgets/common.dart`) — ícone de telefone num quadrado amarelo, +244 em destaque, algarismos grandes e ajuda ao vivo («Faltam 3 números», verde com visto quando completo, aviso se não começar por 9).
 - Depois de mudar o app, recompilar a versão web e ver capturas em telemóvel e em computador antes de entregar.
 
@@ -81,11 +82,19 @@ A correr em `https://bazatranquilo.com`, no servidor Serve1 da Luzingu, em `/var
 - Flutter em `/opt/flutter/bin` (fora do PATH), JDK em `/opt/jdk-17.0.2`, Android SDK em `/opt/android-sdk`.
 - Base de dados: MongoDB do AngoSchool (27019), base `baza`. Os testes usam `baza_teste` e precisam de `MONGODB_TEST_URI` (está no `.env`).
 - Mapas em Docker com o mapa na porta 8088 (`mapas/.env`).
+- TURN das chamadas: coturn em Docker (`turn/`, contentor `baza-turn`), portas 3479, 5350 e 41000–41100/udp; a configuração com a senha está em `/etc/coturn-baza/` (fora do git). Detalhe em `PRODUCAO.md`.
 
 ## Pontos em aberto antes de lançar
 
-- Servidor TURN para as chamadas no app ligarem em dados móveis (`TURN_*`).
+- Testar uma chamada real entre dois telemóveis em dados móveis (o TURN próprio está instalado desde 2026-11-26).
 - Manter o crédito do OpenStreetMap (ícone "ⓘ" no mapa e secção "Mapas" nos Termos): é exigido pela licença.
-- Texto legal por rever por um advogado; pagamentos electrónicos por contratar (comissões e mensalidades pagam-se fora do app e confirmam-se no painel).
+- Pagamentos electrónicos por contratar (comissões e mensalidades pagam-se fora do app, por transferência para a Luzingu, e confirmam-se no painel). O texto legal é definitivo (dono, 2026-11-26: sem advogado).
 - Guardar cópia da chave de assinatura do app (`app/android/app/baza-upload.jks` e `app/android/key.properties`, fora do git): sem ela não há actualizações na loja.
-- iPhone: precisa de Mac com Xcode, conta Apple Developer, e de activar push, avisos e localização em segundo plano para iOS (hoje só Android).
+- iPhone: fica para depois (dono, 2026-11-26) — quem tem iPhone usa a versão web em `/app/` (pergunta frequente na página inicial). Para a App Store faltaria Mac com Xcode, conta Apple Developer e activar push, avisos e localização em segundo plano para iOS.
+
+## Empresa e loja (decidido pelo utilizador, 2026-11-26)
+
+- **Som da viagem no alerta de perigo DESLIGADO** (o SOS continua): `ALERT_AUDIO_ENABLED` (por omissão desligado) esconde o botão no app, faz o servidor responder 403 e tira o som dos Termos e da Política; o serviço `AlertAudioService` e a permissão `FOREGROUND_SERVICE_MICROPHONE` estão comentados no `AndroidManifest.xml`. Para ligar, seguir `PRODUCAO.md` › Permissões Android.
+
+- O Bazá é gerido pela equipa Luzingu do AngoSchool: `LEGAL_ENTITY`, `SUPPORT_*` e `COMMISSION_PAY_INFO` no `.env` usam os dados da Luzingu (os mesmos de `angoschool/backend/app/Data/ContactosLuzingu.php`; se lá mudarem, mudar aqui). `SUPPORT_PHONE` leva **um só** número: o app liga para ele (`tel:`).
+- Textos da Google Play (ficha, serviços em primeiro plano, segurança dos dados): `PLAY_STORE.md`. Mudar o uso da localização, do microfone ou dos dados obriga a actualizar esse ficheiro e a Política de Privacidade.
