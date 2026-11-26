@@ -74,6 +74,11 @@ class BazaMap extends StatefulWidget {
 
 class BazaMapState extends State<BazaMap> with SingleTickerProviderStateMixin {
   final _controller = MapController();
+
+  /// Um só fornecedor de imagens por mapa (guarda a ligação HTTP). Sem cancelar
+  /// os pedidos que deixam de estar à vista: no Android, cancelar a meio deixava
+  /// o mapa sem imagens (cinzento) depois de saltar para a posição do utilizador.
+  final _tiles = NetworkTileProvider(abortObsoleteRequests: false);
   bool _ready = false;
 
   // Depois de o utilizador arrastar o mapa, deixa-se de seguir o carro até ele
@@ -335,6 +340,10 @@ class BazaMapState extends State<BazaMap> with SingleTickerProviderStateMixin {
           urlTemplate: tileUrlTemplate,
           userAgentPackageName: 'ao.baza.baza',
           maxNativeZoom: 19,
+          tileProvider: _tiles,
+          // Uma imagem que falhou volta a ser pedida quando o mapa se mexe.
+          evictErrorTileStrategy:
+              EvictErrorTileStrategy.notVisibleRespectMargin,
         ),
         if (widget.route.length >= 2 || widget.tripRoute.length >= 2)
           PolylineLayer(
