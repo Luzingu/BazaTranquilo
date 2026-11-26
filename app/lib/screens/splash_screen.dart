@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../core/theme.dart';
+import '../widgets/floating_bubbles.dart';
 
 /// Nome completo e lema da marca.
 const appFullName = 'Bazá Tranquilo';
 const appSlogan = 'Bazá com Segurança';
 
-/// Ecrã de arranque: fundo amarelo, a seta do Bazá a "descolar" para o centro,
+/// Ecrã de arranque: fundo amarelo com bolinhas a subir, a seta do Bazá a "descolar" para o centro,
 /// o nome completo e o lema. Com [error], mostra o problema e como o resolver
 /// (por exemplo quando o servidor não responde).
 class SplashScreen extends StatefulWidget {
@@ -60,108 +61,114 @@ class _SplashScreenState extends State<SplashScreen>
 
     return Scaffold(
       backgroundColor: BazaColors.yellow,
-      body: SafeArea(
-        child: Center(
-          // Desloca-se quando não cabe (telemóvel deitado, com a mensagem de erro e
-          // o botão), em vez de transbordar.
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // A seta entra de baixo-esquerda, na direcção em que aponta.
-                AnimatedBuilder(
-                  animation: arrive,
-                  builder: (context, child) => Transform.translate(
-                    offset: Offset(
-                      -70 * (1 - arrive.value),
-                      70 * (1 - arrive.value),
-                    ),
-                    child: Transform.scale(
-                      scale: .5 + .5 * arrive.value,
-                      child: Opacity(
-                        opacity: arrive.value.clamp(0, 1),
-                        child: child,
+      body: Stack(
+        children: [
+          // bolinhas a subir e a espalhar-se por trás de tudo (widgets/floating_bubbles.dart)
+          Positioned.fill(child: FloatingBubbles(still: still)),
+          SafeArea(
+            child: Center(
+              // Desloca-se quando não cabe (telemóvel deitado, com a mensagem de erro e
+              // o botão), em vez de transbordar.
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // A seta entra de baixo-esquerda, na direcção em que aponta.
+                    AnimatedBuilder(
+                      animation: arrive,
+                      builder: (context, child) => Transform.translate(
+                        offset: Offset(
+                          -70 * (1 - arrive.value),
+                          70 * (1 - arrive.value),
+                        ),
+                        child: Transform.scale(
+                          scale: .5 + .5 * arrive.value,
+                          child: Opacity(
+                            opacity: arrive.value.clamp(0, 1),
+                            child: child,
+                          ),
+                        ),
+                      ),
+                      child: SvgPicture.asset(
+                        'assets/brand/arrow.svg',
+                        width: 128,
+                        height: 128,
                       ),
                     ),
-                  ),
-                  child: SvgPicture.asset(
-                    'assets/brand/arrow.svg',
-                    width: 128,
-                    height: 128,
-                  ),
-                ),
-                FadeTransition(
-                  opacity: name,
-                  child: Semantics(
-                    header: true,
-                    label: appFullName,
-                    child: const ExcludeSemantics(
-                      child: Text.rich(
-                        TextSpan(
-                          text: 'Bazá ',
-                          children: [
+                    FadeTransition(
+                      opacity: name,
+                      child: Semantics(
+                        header: true,
+                        label: appFullName,
+                        child: const ExcludeSemantics(
+                          child: Text.rich(
                             TextSpan(
-                              text: 'Tranquilo',
-                              style: TextStyle(fontWeight: FontWeight.w500),
+                              text: 'Bazá ',
+                              children: [
+                                TextSpan(
+                                  text: 'Tranquilo',
+                                  style: TextStyle(fontWeight: FontWeight.w500),
+                                ),
+                              ],
                             ),
-                          ],
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 44,
+                              height: 1,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: -1.5,
+                              color: BazaColors.ink,
+                            ),
+                          ),
                         ),
-                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    FadeTransition(
+                      opacity: slogan,
+                      child: const Text(
+                        appSlogan,
                         style: TextStyle(
-                          fontSize: 44,
-                          height: 1,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: -1.5,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
                           color: BazaColors.ink,
                         ),
                       ),
                     ),
-                  ),
+                    const SizedBox(height: 34),
+                    if (error == null)
+                      _LoadingBar(animation: _bar, still: still)
+                    else ...[
+                      Text(
+                        error,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: BazaColors.ink,
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: BazaColors.ink,
+                          foregroundColor: Colors.white,
+                        ),
+                        onPressed: widget.onRetry,
+                        child: const Text('Tentar novamente'),
+                      ),
+                      TextButton(
+                        onPressed: widget.onLogout,
+                        child: const Text('Sair da conta'),
+                      ),
+                    ],
+                  ],
                 ),
-                const SizedBox(height: 10),
-                FadeTransition(
-                  opacity: slogan,
-                  child: const Text(
-                    appSlogan,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: BazaColors.ink,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 34),
-                if (error == null)
-                  _LoadingBar(animation: _bar, still: still)
-                else ...[
-                  Text(
-                    error,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: BazaColors.ink,
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: BazaColors.ink,
-                      foregroundColor: Colors.white,
-                    ),
-                    onPressed: widget.onRetry,
-                    child: const Text('Tentar novamente'),
-                  ),
-                  TextButton(
-                    onPressed: widget.onLogout,
-                    child: const Text('Sair da conta'),
-                  ),
-                ],
-              ],
+              ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
