@@ -160,9 +160,14 @@ há publicidade.
   https://bazatranquilo.com/privacidade (secção dos direitos), por e-mail tech@angoschool.com.
 - **Público-alvo:** 18 anos ou mais. O app não é dirigido a crianças.
 - **Anúncios:** não contém anúncios.
-- **Acesso ao app (para a revisão):** criar no painel uma conta de passageiro e uma de motorista
-  (aprovada) com senha, e entregar à Google o número e a senha de cada uma. Com o «Código por SMS
-  para entrar» desligado no painel, o revisor entra só com número e senha.
+- **Acesso ao app (para a revisão):** contas já criadas (2026-11-26), que entram **só com o número e a
+  senha, sem SMS** (números em `REVIEW_PHONES` no `.env`; o servidor nunca lhes envia código):
+  passageiro **900 000 001** e motorista aprovado **900 000 002** (Económico, LD-00-00-RV). As senhas
+  estão em `/root/my_secrets/BazaTranquilo/contas_revisao_google.txt`. Instruções para a Google (colar):
+  > Open the app, choose "Passenger" (or tap "I'm a driver" for the driver account), type the phone number
+  > and tap continue: the app asks for the password directly (no SMS code). Driver: tap "Go online" to
+  > receive requests; a test ride can be requested from the passenger account.
+  Senhas novas: `cd backend && npx tsx scripts/criar-contas-revisao.ts`.
 - **Classificação de conteúdo (questionário IARC):** sem violência, sem conteúdo sexual; há
   comunicação entre utilizadores (chat e chamadas) e partilha de localização.
 - **App de transporte / serviços financeiros:** não. Os pagamentos no app são simulados; as comissões

@@ -66,6 +66,12 @@ export const config = {
   },
   /** Por onde vai o código de entrada, como o app o diz ("enviámos por SMS"). Mudar de canal = só servidor. */
   otpChannelLabel: env.OTP_CHANNEL_LABEL ?? 'SMS',
+  /**
+   * Contas de revisão das lojas (Google Play): entram sempre só com a senha, sem
+   * enviar SMS (o número pode não existir ou ser de outra pessoa). Formato +244…,
+   * separados por vírgulas. Criar as contas: scripts/criar-contas-revisao.ts.
+   */
+  reviewPhones: (env.REVIEW_PHONES ?? '').split(',').map((s) => s.trim()).filter(Boolean),
   /** Mensalidade das viaturas de preço combinado: dias grátis ao registar a viatura. */
   subscriptionTrialDays: Number(env.SUBSCRIPTION_TRIAL_DAYS ?? 30),
   /** Cancelamentos tardios: quantos em 24 h levam à suspensão, e por quanto tempo. */

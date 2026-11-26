@@ -149,6 +149,12 @@ authRouter.post('/start', limiter, async (req, res) => {
   // oferece a troca para o tipo certo (`otherRole`).
   if (!existing) await assertPhoneFreeForRole(body.role, phone);
   const hasPassword = Boolean(existing?.passwordHash);
+  // Conta de revisão da loja: só senha, nunca SMS.
+  if (config.reviewPhones.includes(phone)) {
+    if (!hasPassword) throw new HttpError(404, 'Conta não encontrada.');
+    res.json({ phone, method: 'password' });
+    return;
+  }
   if (body.noCode) {
     res.json({ phone, method: hasPassword ? 'password' : 'otp' });
     return;
