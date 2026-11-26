@@ -495,6 +495,13 @@ class _PassengerHomeState extends State<PassengerHome> {
             '${km(estimate.distanceM)} · cerca de ${minutes(estimate.durationS)}',
             style: const TextStyle(color: BazaColors.muted),
           ),
+          if (estimate.hasSurge) ...[
+            const SizedBox(height: 10),
+            _SurgeNotice(
+              label: estimate.surgeLabel ?? 'Procura alta',
+              multiplier: estimate.surgeMultiplier,
+            ),
+          ],
           const SizedBox(height: 10),
           if (estimate.options.any((o) => o.group == 'cargo' && !o.negotiated))
             SegmentedButton<String>(
@@ -1384,6 +1391,64 @@ class _NegotiationState extends State<_Negotiation> {
             ),
         ],
       ],
+    );
+  }
+}
+
+/// Aviso de taxa por procura, por cima dos preços: o motivo e o multiplicador,
+/// em letra grande e com ícone (há quem tenha pouca prática com o telemóvel).
+class _SurgeNotice extends StatelessWidget {
+  const _SurgeNotice({required this.label, required this.multiplier});
+  final String label;
+  final double multiplier;
+
+  @override
+  Widget build(BuildContext context) {
+    final x = (multiplier * 100).round() / 100;
+    final times = '×${x.toString().replaceAll('.', ',')}';
+    return Semantics(
+      label: '$label. Preço multiplicado por $times.',
+      excludeSemantics: true,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF3C4),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFFFC400)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFC400),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.trending_up, color: BazaColors.ink),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$label · $times',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const Text(
+                    'Os preços abaixo já incluem este aumento. O preço que vê é o que paga.',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

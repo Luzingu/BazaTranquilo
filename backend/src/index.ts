@@ -24,6 +24,8 @@ import { safetyRouter, shareRouter, guardianRouter } from './routes/share.js';
 import { supportRouter, noticesRouter } from './routes/support.js';
 import { intercityRouter } from './routes/intercity.js';
 import { agentRouter, escalateStaleAlerts, purgeOldAudio } from './routes/agent.js';
+import { paymentsRouter } from './routes/payments.js';
+import { expireReferences } from './services/gateway.js';
 import { loadSettings } from './services/settings.js';
 import { sendFile } from './services/files.js';
 import { initRealtime } from './services/realtime.js';
@@ -86,6 +88,7 @@ app.use('/agent', agentRouter);
 app.use('/guardian', guardianRouter);
 app.use('/intercity', intercityRouter);
 app.use('/wallet', walletRouter);
+app.use('/payments', paymentsRouter);
 app.use(() => {
   throw new HttpError(404, 'Rota não encontrada.');
 });
@@ -103,6 +106,7 @@ await ensureFleetUsers();
 // Alertas de perigo que nenhum agente assumiu sobem para o comando provincial.
 setInterval(() => escalateStaleAlerts().catch((err) => console.error(err)), 30_000).unref();
 setInterval(() => purgeOldAudio().catch((err) => console.error(err)), 3600_000).unref();
+setInterval(() => expireReferences().catch((err) => console.error(err)), 60_000).unref();
 server.listen(config.port, config.host, () => {
   console.log(`Bazá API em http://localhost:${config.port} (${config.isDev ? 'desenvolvimento' : 'produção'})`);
 });

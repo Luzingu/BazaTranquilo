@@ -130,7 +130,7 @@ authRouter.post('/start', limiter, async (req, res) => {
   // é igual à dos outros utilizadores, para o número não se distinguir.
   if (await agentByPhone(phone)) {
     if (body.noCode) {
-      res.json({ phone, method: 'otp' });
+      res.json({ phone, method: 'otp', via: config.otpChannelLabel });
       return;
     }
     const key = `agent:${phone}`;
@@ -141,7 +141,7 @@ authRouter.post('/start', limiter, async (req, res) => {
       { codeHash: hashCode(key, code), attempts: 0, expiresAt: new Date(Date.now() + config.otpTtlMs) },
       { upsert: true },
     );
-    res.json({ phone, method: 'otp', canUsePassword: false, ...devCode(code) });
+    res.json({ phone, method: 'otp', via: config.otpChannelLabel, canUsePassword: false, ...devCode(code) });
     return;
   }
   const existing = await findAccount(body.role, { phone });
@@ -181,7 +181,7 @@ authRouter.post('/start', limiter, async (req, res) => {
     { upsert: true },
   );
   // `canUsePassword`: o ecrã do código oferece também a entrada com a senha.
-  res.json({ phone, method: 'otp', canUsePassword: hasPassword, ...devCode(code) });
+  res.json({ phone, method: 'otp', via: config.otpChannelLabel, canUsePassword: hasPassword, ...devCode(code) });
 });
 
 authRouter.post('/otp/verify', limiter, async (req, res) => {

@@ -53,6 +53,9 @@ const rideSchema = new Schema(
     fare: { type: Number, required: true },
     /** Preço calculado pela tarifa, que serve de referência à negociação. */
     suggestedFare: Number,
+    /** Taxa por procura aplicada ao preço da tarifa (×1,2 …) e o motivo mostrado ao passageiro. */
+    surgeMultiplier: Number,
+    surgeLabel: String,
     /** Contrapropostas de preço dos motoristas, enquanto a corrida procura motorista. */
     bids: [
       new Schema(
@@ -67,6 +70,8 @@ const rideSchema = new Schema(
     /** Até quando se procura motorista (prolonga-se enquanto houver negociação). */
     searchUntil: Date,
     commission: { type: Number, default: 0 },
+    /** Corrida de tarifa sem taxa por ser uma das viagens grátis do motorista. */
+    freeRide: { type: Boolean, default: false },
     paymentStatus: { type: String, enum: ['pending', 'paid', 'failed'], default: 'pending' },
     /** Motoristas que recusaram a oferta. */
     declinedBy: [{ type: Schema.Types.ObjectId, ref: 'Driver' }],

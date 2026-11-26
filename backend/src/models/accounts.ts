@@ -1,4 +1,4 @@
-import { monthlyFee, subscriptionState } from '../services/settings.js';
+import { monthlyFee, settings, subscriptionState } from '../services/settings.js';
 import { MAX_VEHICLES, SERVICE_KEYS, config, type RideCategory } from '../config.js';
 import { HttpError } from '../http.js';
 import { Schema, model, type InferSchemaType, type HydratedDocument, type Types } from 'mongoose';
@@ -142,7 +142,13 @@ const driverSchema = new Schema(
     blockedAt: Date,
     blockedBy: String,
     /** Comissões de corridas em dinheiro ainda por pagar ao Bazá (Kz). */
+    /**
+     * Conta-corrente com o Bazá. Negativo = saldo pré-pago do motorista (saldo =
+     * −commissionDue); positivo = em falta. Ver services/balance.ts.
+     */
     commissionDue: { type: Number, default: 0 },
+    /** Viagens sem taxa que ainda tem (fixadas ao criar a conta; vazio = contas antigas, vale o valor do painel). */
+    freeRidesLeft: Number,
     location: {
       type: { type: String, enum: ['Point'] },
       coordinates: { type: [Number] }, // [lng, lat]
@@ -213,7 +219,8 @@ export function createAccount(
   role: Role,
   data: { name?: string; phone?: string; email?: string; passwordHash?: string; phoneVerified?: boolean },
 ): Promise<AccountDoc> {
-  return role === 'driver' ? DriverModel.create(data) : PassengerModel.create(data);
+  // Motorista novo: começa com as viagens grátis definidas no painel.
+  return role === 'driver' ? DriverModel.create({ ...data, freeRidesLeft: settings.freeRides }) : PassengerModel.create(data);
 }
 
 /** Soma `amount` ao saldo; com `minBalance`, só se o saldo actual o permitir. */

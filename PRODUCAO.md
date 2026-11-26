@@ -161,6 +161,10 @@ Antes da primeira publicação na Play Store:
 ### Definições a fazer no painel depois de instalar
 
 - **Definições › Comissão das corridas** (por omissão 15 %) e **Comissão intermunicipal** (por omissão 10 %).
+- **Saldos dos motoristas** (desde 2026-11-26, Finanças): saldo de cada motorista, carregar à mão (dinheiro recebido), devolver saldo, viagens grátis por motorista, referências geradas. **Definições › Viagens grátis para motoristas novos** (`DRIVER_FREE_RIDES`, por omissão 10; contas antigas sem o campo usam o valor do painel).
+- **Referências de pagamento (carregar o saldo):** `REFERENCE_PROVIDER` (hoje só `simulado`), `PAYMENT_SIMULATION` = `off` (omissão em produção: os motoristas comunicam transferências) | `testers` (só os números em `PAYMENT_SIM_PHONES`, separados por vírgulas) | `all`; `PAYMENT_SIM_DELAY_S` (segundos até a referência simulada se dar por paga, 20); `REFERENCE_TTL_HOURS` (48). ⛔ A simulação não move dinheiro real: em produção, só `testers` com contas da equipa. Fornecedor real: escrever o adaptador em `backend/src/services/gateway.ts` e dar-lhe o endereço `POST https://bazatranquilo.com/payments/webhook/<nome>`.
+- **Canal do código de entrada:** `OTP_CHANNEL_LABEL` (por omissão `SMS`) é o que o app escreve em «enviámos por …».
+- **Finanças › Tarifas e procura** (desde 2026-11-26): tarifas de Moto, Económico e Conforto (base, por km, por minuto, mínimo — por omissão as de `config.ts`), preço por paragem (200 Kz), procura automática (desligada por omissão; escalões ×1,2 com 2 pedidos por motorista livre e ×1,5 com 3, raio de 3 km, últimos 10 min), horários com multiplicador e tecto (×2). Ficam na colecção `definicoes` (chaves `tariffs`, `stopFee`, `surge`).
 - **Definições › Mensalidade por tipo de viatura** (por omissão 0 = gratuito).
 - **Instituições › Postos policiais:** registar os postos (com a posição no mapa e o telefone do posto) e os agentes de cada um, indicados pela Polícia. Marcar o comando provincial de cada província, que recebe os alertas sem resposta.
 - **Intermunicipal:** criar as rotas entre municípios com o preço por passageiro.
@@ -272,3 +276,13 @@ Por fazer nesta instalação:
 - ✅ 2026-11-26: `LEGAL_ENTITY`, `SUPPORT_EMAIL`, `SUPPORT_PHONE` e `COMMISSION_PAY_INFO` com os dados da Luzingu (o Bazá é gerido pela equipa do AngoSchool). Cópia do `.env` anterior: `/root/baza-env-antes-dados-empresa-20261126.bak`.
 - Textos para a Google Play Console (ficha, serviços em primeiro plano, segurança dos dados): `PLAY_STORE.md`.
 - O *lint* das versões release está desligado em `app/android/build.gradle.kts` porque rebenta com o JDK 17; com JDK 21 pode voltar a ligar-se.
+
+## Actualizações do app — versão mínima e correcções sem loja (2026-11-26)
+
+O mesmo desenho das apps AngoSchool (detalhe e regras: `/var/www/angoschool_front_flutter/docs/PUBLICAR_LOJAS.md` § «Actualizações»).
+
+- **Versão mínima / aviso:** o app lê `https://bazatranquilo.com/app-versao.json` — o ficheiro `site/app-versao.json`, servido pelo Nginx sem cache (não é preciso compilar nem reiniciar a API). Abaixo de `minima` → ecrã a bloquear com «Actualizar agora»; abaixo de `actual` → aviso que se fecha. Cada uma pode ser `"X.Y.Z"` ou `{"android": …, "ios": …}`. Pergunta ao abrir e quando o app volta ao ecrã (≤ 30 min); falha de rede nunca bloqueia; na web nunca bloqueia. Código: `app/lib/widgets/porteiro_versao.dart` (no `builder` do `MaterialApp`). ⛔ Nunca subir a `minima` antes de a versão nova estar disponível na loja.
+- **Correcções sem loja (Shorebird):** app registado na conta Shorebird da Luzingu (`app/shorebird.yaml`, `app_id` `f1a6454e-e05c-4ce1-a5a5-d5eb38a39b3d`, vai dentro do app pelos `assets`). Chave da conta em `/root/my_secrets/apps_flutter/shorebird_token`; ferramenta em `/root/.shorebird/bin/shorebird` (o mesmo Flutter, 3.50.1).
+  - Versão para a loja: `bash app/tools/compilar_loja.sh appbundle [commit]` — compila de um commit fixo (o trabalho por commitar não entra), com `shorebird release android`, `API_URL=https://bazatranquilo.com` e `APP_VERSAO` tirado do `pubspec.yaml`; o ficheiro fica em `app/build/loja/`. ⛔ Uma versão compilada com `flutter build` não recebe correcções.
+  - Correcção: `bash app/tools/publicar_correcao.sh [percentagem] [commit]` (só código Dart; permissões, plugins, ícone, `AndroidManifest.xml` e versão do Flutter vão à loja). ⛔ Não subir o `version:` para uma correcção.
+  - ✅ 2026-11-26: a Shorebird está nos «Prestadores de serviços» da Política de Privacidade e no formulário de segurança dos dados (`PLAY_STORE.md`) — recebe só dados técnicos (app, versão, sistema, identificador aleatório da instalação).

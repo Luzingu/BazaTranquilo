@@ -786,36 +786,43 @@ class _AccountNote extends StatelessWidget {
     final vehicle = user?.vehicles.where((v) => v.active).firstOrNull;
     String? text, detail;
     var alert = false;
-    switch (vehicle?.subscription) {
-      case 'expired':
-        alert = true;
-        text = 'Mensalidade em atraso · ${kz(vehicle!.monthlyFee)} por mês';
-        detail =
-            'A mensalidade desta viatura terminou a ${date(vehicle.paidUntil!)}. Enquanto não for paga, não pode ficar online com ela.';
-      case 'active':
-        final days = vehicle!.paidUntil!.difference(DateTime.now()).inDays;
-        alert = days < 5;
-        text = days < 5
-            ? 'Mensalidade termina a ${date(vehicle.paidUntil!)}'
-            : 'Mensalidade em dia até ${date(vehicle.paidUntil!)}';
-        detail =
-            'Esta viatura combina o preço directamente com o cliente e não paga comissão por serviço. Paga uma mensalidade de ${kz(vehicle.monthlyFee)}.';
-      case 'trial':
-        text =
-            'Mensalidade de ${kz(vehicle!.monthlyFee)} · período grátis ao ficar online';
-        detail =
-            'Esta viatura combina o preço directamente com o cliente e não paga comissão por serviço. A mensalidade é de ${kz(vehicle.monthlyFee)}; o período grátis começa quando ficar online pela primeira vez.';
-      default:
-        if (driver.commissionDue > 0) {
-          alert =
-              driver.commissionEnforced &&
-              driver.commissionDue > driver.commissionLimit;
-          text = 'Comissões por pagar: ${kz(driver.commissionDue)}';
+    // O servidor escreve a nota (saldo, viagens grátis, mensalidade): regras
+    // novas mudam lá, sem nova versão do app.
+    if (driver.accountNoteFromServer) {
+      final n = driver.accountNote;
+      text = n?['text'] as String?;
+      alert = n?['alert'] == true;
+    } else
+      switch (vehicle?.subscription) {
+        case 'expired':
+          alert = true;
+          text = 'Mensalidade em atraso · ${kz(vehicle!.monthlyFee)} por mês';
           detail =
-              'O Bazá fica com ${(driver.commissionRate * 100).toStringAsFixed(driver.commissionRate * 100 % 1 == 0 ? 0 : 1).replaceAll('.', ',')} % de cada corrida. Nas corridas pagas em dinheiro recebe o valor todo e a comissão fica por pagar.'
-              '${driver.commissionEnforced ? ' Acima de ${kz(driver.commissionLimit)} em dívida, deixa de poder ficar online.' : ''}';
-        }
-    }
+              'A mensalidade desta viatura terminou a ${date(vehicle.paidUntil!)}. Enquanto não for paga, não pode ficar online com ela.';
+        case 'active':
+          final days = vehicle!.paidUntil!.difference(DateTime.now()).inDays;
+          alert = days < 5;
+          text = days < 5
+              ? 'Mensalidade termina a ${date(vehicle.paidUntil!)}'
+              : 'Mensalidade em dia até ${date(vehicle.paidUntil!)}';
+          detail =
+              'Esta viatura combina o preço directamente com o cliente e não paga comissão por serviço. Paga uma mensalidade de ${kz(vehicle.monthlyFee)}.';
+        case 'trial':
+          text =
+              'Mensalidade de ${kz(vehicle!.monthlyFee)} · período grátis ao ficar online';
+          detail =
+              'Esta viatura combina o preço directamente com o cliente e não paga comissão por serviço. A mensalidade é de ${kz(vehicle.monthlyFee)}; o período grátis começa quando ficar online pela primeira vez.';
+        default:
+          if (driver.commissionDue > 0) {
+            alert =
+                driver.commissionEnforced &&
+                driver.commissionDue > driver.commissionLimit;
+            text = 'Comissões por pagar: ${kz(driver.commissionDue)}';
+            detail =
+                'O Bazá fica com ${(driver.commissionRate * 100).toStringAsFixed(driver.commissionRate * 100 % 1 == 0 ? 0 : 1).replaceAll('.', ',')} % de cada corrida. Nas corridas pagas em dinheiro recebe o valor todo e a comissão fica por pagar.'
+                '${driver.commissionEnforced ? ' Acima de ${kz(driver.commissionLimit)} em dívida, deixa de poder ficar online.' : ''}';
+          }
+      }
     if (text == null) return const SizedBox(height: 0);
     final color = alert ? BazaColors.red : BazaColors.muted;
     return Padding(
@@ -823,9 +830,13 @@ class _AccountNote extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
         // Abre o ecrã onde se vê o detalhe e se comunica o pagamento.
-        onTap: () => Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => const DriverAccountScreen())),
+        onTap: () async {
+          await Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const DriverAccountScreen()),
+          );
+          // O saldo pode ter mudado (carregamento, mensalidade).
+          await driver.loadSummary();
+        },
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 6),
           child: Row(

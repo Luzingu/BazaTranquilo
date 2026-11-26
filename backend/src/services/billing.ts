@@ -5,6 +5,9 @@ import { CommissionEntryModel, PaymentRequestModel, SubscriptionPaymentModel } f
 import { emitToUser } from './realtime.js';
 import { pushToUser } from './push.js';
 import { isNegotiated, monthlyFee, settings, subscriptionState } from './settings.js';
+import { balanceOf, driversFree, freeRidesLeft } from './balance.js';
+import { servedCategories } from '../models/accounts.js';
+import { topupAvailable } from './gateway.js';
 
 // O que os motoristas pagam ao Bazá: comissões das corridas em dinheiro e a
 // mensalidade de cada viatura de preço combinado. O motorista avisa no app que
@@ -45,9 +48,12 @@ export async function extendSubscription(
   return until;
 }
 
-/** Abate comissões em dívida e regista o pagamento. */
+/**
+ * Carrega o saldo do motorista (abate a conta-corrente; pode ficar negativa,
+ * que é saldo a favor dele) e regista o movimento.
+ */
 export async function payCommission(driver: DriverDoc, amount: number, opts: { note?: string; by: string }) {
-  if (amount > driver.commissionDue) throw new HttpError(400, 'O valor é superior ao que o motorista deve.');
+  if (!(amount > 0)) throw new HttpError(400, 'Indique um valor maior do que zero.');
   driver.commissionDue -= amount;
   await driver.save();
   await CommissionEntryModel.create({
@@ -60,6 +66,63 @@ export async function payCommission(driver: DriverDoc, amount: number, opts: { n
   });
   emitToUser(driver.id, 'account:update', {});
   return driver.commissionDue;
+}
+
+const kz = (n: number) => `${String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')} Kz`;
+
+/** Paga meses de mensalidade com o saldo (desconta logo e prolonga a viatura). */
+export async function paySubscriptionFromBalance(driver: DriverDoc, vehicleId: string, months: number) {
+  const vehicle = driver.vehicles.id(vehicleId);
+  if (!vehicle) throw new HttpError(404, 'Viatura não encontrada.');
+  const fee = monthlyFee(vehicle.category);
+  if (fee <= 0) throw new HttpError(400, 'Esta viatura não tem mensalidade a pagar.');
+  const amount = fee * months;
+  if (balanceOf(driver) < amount) {
+    throw new HttpError(402, `Saldo insuficiente: a mensalidade custa ${kz(amount)} e tem ${kz(Math.max(0, balanceOf(driver)))}. Carregue o saldo primeiro.`);
+  }
+  driver.commissionDue += amount;
+  await driver.save();
+  await CommissionEntryModel.create({
+    driver: driver._id,
+    type: 'charge',
+    amount,
+    note: `Mensalidade ${vehicle.plate} · ${months === 1 ? '1 mês' : `${months} meses`}`,
+    by: driver.name ?? 'Motorista',
+    dueAfter: driver.commissionDue,
+  });
+  return extendSubscription(driver, vehicleId, months, { amount, note: 'Pago com o saldo', by: driver.name ?? 'Motorista' });
+}
+
+/**
+ * A nota da conta no ecrã principal do motorista, já escrita (o app só a
+ * mostra): mensalidade da viatura activa ou saldo e viagens grátis.
+ */
+export function accountNote(driver: DriverDoc): { text: string; detail: string; alert: boolean } | null {
+  const active = driver.vehicles.id(driver.vehicle?.id ?? '');
+  const rate = `${String(Math.round(settings.commissionRate * 1000) / 10).replace('.', ',')} %`;
+  if (active && isNegotiated(active.category) && monthlyFee(active.category) > 0) {
+    const fee = monthlyFee(active.category);
+    const state = subscriptionState(active.category, active.paidUntil);
+    const until = active.paidUntil?.toLocaleDateString('pt-PT', { timeZone: 'Africa/Luanda' });
+    if (state === 'expired') return { alert: true, text: `Mensalidade em atraso · ${kz(fee)} por mês`, detail: `A mensalidade desta viatura terminou a ${until}. Pague-a com o saldo para voltar a ficar online.` };
+    if (state === 'active') {
+      const days = Math.floor((active.paidUntil!.getTime() - Date.now()) / 86_400_000);
+      return { alert: days < 5, text: days < 5 ? `Mensalidade termina a ${until}` : `Mensalidade em dia até ${until}`, detail: `Esta viatura combina o preço com o cliente e paga uma mensalidade de ${kz(fee)}, descontada do saldo.` };
+    }
+    if (state === 'trial') return { alert: false, text: `Mensalidade de ${kz(fee)} · período grátis ao ficar online`, detail: 'O período grátis começa quando ficar online pela primeira vez. Depois paga-se com o saldo.' };
+  }
+  const tariff = driver.vehicle ? servedCategories(driver.vehicle).some((c) => !isNegotiated(c)) : true;
+  if (!tariff) return null;
+  if (driversFree()) {
+    return { alert: false, text: 'Bazá gratuito para motoristas · sem taxas', detail: 'Neste momento o Bazá não cobra nada aos motoristas: as corridas não descontam taxa e não precisa de saldo para receber pedidos.' };
+  }
+  const free = freeRidesLeft(driver);
+  const balance = balanceOf(driver);
+  if (free > 0) {
+    return { alert: false, text: `${free === 1 ? '1 viagem grátis' : `${free} viagens grátis`} · saldo ${kz(Math.max(0, balance))}`, detail: `As próximas ${free === 1 ? 'corrida não desconta' : `${free} corridas não descontam`} a taxa. Depois, cada corrida desconta ${rate} do preço do saldo.` };
+  }
+  if (balance <= 0) return { alert: true, text: 'Sem saldo · carregue para receber pedidos', detail: `Cada corrida desconta ${rate} do preço do saldo. Sem saldo para a taxa, não recebe pedidos.` };
+  return { alert: balance < 1000, text: `Saldo ${kz(balance)}${balance < 1000 ? ' · está a acabar' : ''}`, detail: `Cada corrida desconta ${rate} do preço do saldo. Sem saldo para a taxa de uma corrida, não a recebe.` };
 }
 
 /** As viaturas do motorista que pagam mensalidade, com o estado de cada uma. */
@@ -107,6 +170,23 @@ export async function driverAccount(driver: DriverDoc) {
       enforced: config.commission.enforced,
     },
     payInfo: config.commission.payInfo,
+    /** Saldo pré-pago (o app mostra-o; a taxa de cada corrida sai daqui). */
+    balance: {
+      amount: balanceOf(driver),
+      freeRidesLeft: freeRidesLeft(driver),
+      rate: settings.commissionRate,
+      /** Taxa a 0 %: gratuito, o app esconde "Carregar saldo". */
+      free: driversFree(),
+      /** Carregar por referência (gerada pela API). false: só transferência comunicada. */
+      topup: {
+        available: topupAvailable(driver),
+        min: config.driverBalance.topupMin,
+        max: config.driverBalance.topupMax,
+        presets: config.driverBalance.topupPresets,
+        label: 'Pagar por referência Multicaixa',
+      },
+    },
+    note: accountNote(driver),
     trialDays: config.subscriptionTrialDays,
     methods: PAYMENT_METHODS.filter((m) => m !== 'multicaixa'),
     vehicles: feeVehicles(driver),
@@ -138,9 +218,9 @@ export async function createPaymentRequest(
     if (!input.months) throw new HttpError(400, 'Indique quantos meses quer pagar.');
     amount = fee * input.months;
   } else {
+    // Carregamento do saldo por transferência ou em dinheiro: a equipa confirma.
     amount = input.amount ?? 0;
-    if (amount <= 0) throw new HttpError(400, 'Indique o valor que pagou.');
-    if (amount > driver.commissionDue) throw new HttpError(400, 'O valor é superior às comissões por pagar.');
+    if (amount <= 0) throw new HttpError(400, 'Indique o valor que carregou.');
   }
   const same = await PaymentRequestModel.countDocuments({
     driver: driver._id,
@@ -177,7 +257,7 @@ export async function reviewPaymentRequest(id: string, approve: boolean, opts: {
     if (request.kind === 'subscription') {
       await extendSubscription(driver, request.vehicleId!, request.months!, { amount: request.amount, note, by: opts.by });
     } else {
-      await payCommission(driver, Math.min(request.amount, driver.commissionDue), { note, by: opts.by });
+      await payCommission(driver, request.amount, { note: `Carregamento · ${note}`, by: opts.by });
     }
   } else if (!opts.note) {
     throw new HttpError(400, 'Indique o motivo da rejeição, para o motorista saber o que corrigir.');
@@ -193,7 +273,7 @@ export async function reviewPaymentRequest(id: string, approve: boolean, opts: {
       body: approve
         ? request.kind === 'subscription'
           ? `A mensalidade da viatura ${request.plate ?? ''} foi prolongada.`
-          : 'As suas comissões foram abatidas.'
+          : `O seu saldo foi carregado com ${kz(request.amount)}.`
         : (opts.note ?? ''),
     });
   }

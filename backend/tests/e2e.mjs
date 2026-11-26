@@ -337,22 +337,143 @@ async function run() {
     check('o utilizador vê e remove os seus locais', mine.total === 1 && (await call('DELETE', `/places/contributions/${mine.places[0].id}`, pas.token)).s === 200);
   }
 
-  // Comissões: dívida do motorista, pagamento registado no painel e percentagem
+  // Saldo pré-pago: taxa por corrida, viagens grátis e carregamentos
   {
+    group('Saldo do motorista');
+    const sleep = (ms) => new Promise((ok) => setTimeout(ok, ms));
+    // Motorista próprio para estes testes (viatura Económico, só corridas de tarifa).
+    const d1 = await makeDriver('923000962', 'Motorista Saldo', 'LD-96-96-SD');
+    await call('POST', '/driver/online', d1.token, { online: true, location: here });
+    r = await call('POST', '/rides', pas.token, { pickup: { ...here, address: 'Mutamba' }, dropoff: { ...there, address: 'Ilha' }, category: 'economy', paymentMethod: 'cash' });
+    await call('POST', `/rides/${r.ride.id}/accept`, d1.token);
+    await finish(r.ride.id, d1.token);
     r = await call('GET', '/driver/commission', d1.token);
-    const due = r.due;
-    check('corrida em dinheiro deixa a comissão em dívida', due > 0 && r.entries.some((e) => e.type === 'charge') && r.rate === 0.15 && r.enforced === false);
+    check('com viagens grátis, a corrida em dinheiro não desconta taxa', r.entries.some((e) => e.type === 'charge' && e.amount === 0 && /Viagem grátis/.test(e.note ?? '')) && r.balance === 0 && r.rate === 0.15);
+    await call('POST', '/driver/online', d1.token, { online: false });
+    r = await call('POST', `${P}/admin/motoristas/${d1.user.id}/viagens-gratis`, admin.token, { count: 0 });
+    check('o painel tira as viagens grátis a um motorista', r.freeRidesLeft === 0);
+    r = await call('GET', '/driver/summary', d1.token);
+    check('sem saldo, a nota do ecrã principal avisa (escrita pelo servidor)', r.note?.alert === true && /Sem saldo/.test(r.note.text), JSON.stringify(r.note));
+    r = await call('POST', '/driver/online', d1.token, { online: true, location: here });
+    check('sem saldo nem viagens grátis, não fica online', r.s === 402 && /saldo/i.test(r.error ?? ''), `${r.s} ${r.error}`);
+    check('carregamento abaixo do mínimo é recusado', (await call('POST', '/driver/topup', d1.token, { amount: 100 })).s === 400);
+    r = await call('POST', '/driver/topup', d1.token, { amount: 3000 });
+    const ref = r.payment;
+    check('o motorista gera uma referência para carregar', r.s === 201 && ref.status === 'pending' && ref.details.some((d) => d.label === 'Entidade' && d.copy) && ref.details.some((d) => d.label === 'Referência' && /^\d{3} \d{3} \d{3}$/.test(d.value)) && ref.simulated === true && ref.pollSeconds > 0);
+    check('só o dono vê a sessão de pagamento', (await call('GET', `/payments/${ref.id}`, pas.token)).s === 404);
+    await sleep(3000);
+    r = await call('GET', `/payments/${ref.id}`, d1.token);
+    check('a referência paga-se (simulação) e a sessão diz que está paga', r.payment?.status === 'paid' && r.payment.details.length === 0);
+    r = await call('GET', '/driver/commission', d1.token);
+    check('o pagamento entra no saldo', r.balance === 3000 && r.due === -3000);
+    r = await call('GET', '/driver/account', d1.token);
+    check('o extracto mostra o carregamento por referência', r.entries[0].type === 'payment' && /Carregamento por referência/.test(r.entries[0].note) && r.balance.amount === 3000 && r.balance.topup.available === true);
+    r = await call('POST', '/driver/topup', d1.token, { amount: 1000 });
+    const ref2 = r.payment.id;
+    r = await call('GET', `${P}/admin/carregamentos`, admin.token);
+    check('o painel vê as referências geradas', r.simulation === true && r.payments.some((p) => p.id === ref2 && p.status === 'pending'));
+    check('o painel dá uma referência de simulação por paga', (await call('POST', `${P}/admin/carregamentos/${ref2}/simular`, admin.token)).ok === true && (await call('GET', '/driver/commission', d1.token)).balance === 4000);
+    check('não se dá por paga duas vezes', (await call('POST', `${P}/admin/carregamentos/${ref2}/simular`, admin.token)).s === 409);
+    r = await call('POST', `${P}/admin/comissoes/${d1.user.id}/pagamento`, admin.token, { amount: 500, note: 'Dinheiro, no escritório' });
+    check('a equipa carrega o saldo à mão (dinheiro recebido)', r.s === 200 && r.due === -4500);
     r = await call('GET', `${P}/admin/comissoes`, admin.token);
-    check('o painel mostra quem deve comissões', r.totalDue >= due && r.drivers.some((d) => d.id === d1.user.id && d.due === due));
-    check('não se regista um pagamento acima da dívida', (await call('POST', `${P}/admin/comissoes/${d1.user.id}/pagamento`, admin.token, { amount: due + 1 })).s === 400);
-    r = await call('POST', `${P}/admin/comissoes/${d1.user.id}/pagamento`, admin.token, { amount: due, note: 'Dinheiro, no escritório' });
-    check('pagamento da comissão registado', r.s === 200 && r.due === 0);
+    check('o painel mostra o saldo de cada motorista', r.balances.some((d) => d.id === d1.user.id && d.balance === 4500 && d.freeRidesLeft === 0) && r.freeRides === 1000);
+    check('com saldo, volta a ficar online', (await call('POST', '/driver/online', d1.token, { online: true, location: here })).s === 200);
+    // Uma corrida cuja taxa passa do saldo não chega ao motorista.
+    await call('POST', `${P}/admin/comissoes/${d1.user.id}/pagar-motorista`, admin.token, { amount: 4400, note: 'Devolução' });
+    check('a equipa devolve saldo', (await call('GET', '/driver/commission', d1.token)).balance === 100);
+    r = await call('POST', '/rides', pas.token, { pickup: { ...here, address: 'Mutamba' }, dropoff: { ...there, address: 'Ilha' }, category: 'economy', paymentMethod: 'cash' });
+    const big = r.ride;
+    check('a taxa desta corrida passa do saldo', big.fare * 0.15 > 100);
+    check('o motorista sem saldo para a taxa não recebe o pedido', !(await call('GET', '/driver/offers', d1.token)).offers?.some((o) => o.id === big.id));
+    r = await call('POST', `/rides/${big.id}/accept`, d1.token);
+    check('nem o consegue aceitar', r.s === 402 && /Saldo insuficiente/.test(r.error ?? ''));
+    await call('POST', `/rides/${big.id}/cancel`, pas.token);
+    // Com saldo, a corrida desconta a taxa.
+    await call('POST', `${P}/admin/comissoes/${d1.user.id}/pagamento`, admin.token, { amount: 5000 });
+    r = await call('POST', '/rides', pas.token, { pickup: { ...here, address: 'Mutamba' }, dropoff: { ...there, address: 'Ilha' }, category: 'economy', paymentMethod: 'cash' });
+    const paidRide = r.ride;
+    r = await call('GET', '/driver/offers', d1.token);
+    check('com saldo, recebe o pedido', r.offers?.some((o) => o.id === paidRide.id), JSON.stringify({ s: r.s, e: r.error, n: r.offers?.length, ride: paidRide?.id, rs: paidRide?.status }));
+    await call('POST', `/rides/${paidRide.id}/accept`, d1.token);
+    await finish(paidRide.id, d1.token);
     r = await call('GET', '/driver/commission', d1.token);
-    check('o motorista vê o pagamento no extracto', r.due === 0 && r.entries[0].type === 'payment' && r.entries[0].note === 'Dinheiro, no escritório');
+    check('a taxa da corrida sai do saldo', r.balance === 5100 - Math.round(paidRide.fare * 0.15) && r.entries[0].note === 'Taxa da corrida');
+    // Taxa a 0 %: gratuito — sem saldo e sem viagens grátis, trabalha na mesma.
+    await call('POST', '/driver/online', d1.token, { online: false });
+    const left = (await call('GET', '/driver/commission', d1.token)).balance;
+    await call('POST', `${P}/admin/comissoes/${d1.user.id}/pagar-motorista`, admin.token, { amount: left });
+    check('o motorista fica sem saldo', (await call('GET', '/driver/commission', d1.token)).balance === 0);
+    await call('POST', `${P}/admin/comissoes/percentagem`, admin.token, { percent: 0 });
+    check('com a taxa a 0 %, fica online sem saldo', (await call('POST', '/driver/online', d1.token, { online: true, location: here })).s === 200);
+    r = await call('GET', '/driver/account', d1.token);
+    check('a app sabe que é gratuito (sem «Carregar saldo») e a nota di-lo', r.balance.free === true && /gratuito/.test(r.note?.text ?? '') && r.note.alert === false);
+    r = await call('POST', '/rides', pas.token, { pickup: { ...here, address: 'Mutamba' }, dropoff: { ...there, address: 'Ilha' }, category: 'economy', paymentMethod: 'cash' });
+    const freeRide = r.ride;
+    check('gratuito: recebe o pedido sem saldo', (await call('GET', '/driver/offers', d1.token)).offers?.some((o) => o.id === freeRide.id));
+    await call('POST', `/rides/${freeRide.id}/accept`, d1.token);
+    await finish(freeRide.id, d1.token);
+    r = await call('GET', '/driver/commission', d1.token);
+    check('gratuito: a corrida não desconta nada', r.balance === 0 && r.freeRidesLeft === 0);
+    await call('POST', `${P}/admin/comissoes/percentagem`, admin.token, { percent: 15 });
+    check('as viagens grátis dos motoristas novos mudam-se no painel', (await call('POST', `${P}/admin/viagens-gratis`, admin.token, { count: 5 })).freeRides === 5);
+    const nd = await makeDriver('923000961', 'Motorista Novo', 'LD-96-96-NV');
+    check('o motorista novo começa com as viagens grátis do painel', (await call('GET', '/driver/account', nd.token)).balance.freeRidesLeft === 5);
+    await call('POST', `${P}/admin/viagens-gratis`, admin.token, { count: 1000 });
+    await call('DELETE', '/me', nd.token);
+    await call('POST', '/driver/online', d1.token, { online: false });
     check('percentagem acima do máximo é recusada', (await call('POST', `${P}/admin/comissoes/percentagem`, admin.token, { percent: 80 })).s === 400);
     check('o administrador altera a percentagem', (await call('POST', `${P}/admin/comissoes/percentagem`, admin.token, { percent: 12.5 })).rate === 0.125);
     check('a nova percentagem chega ao motorista', (await call('GET', '/driver/commission', d1.token)).rate === 0.125);
     await call('POST', `${P}/admin/comissoes/percentagem`, admin.token, { percent: 15 });
+
+    // Tarifas e taxa por procura (Finanças › Tarifas e procura)
+    group('Tarifas e taxa por procura');
+    let t = await call('GET', `${P}/admin/tarifas`, admin.token);
+    check('o painel mostra as tarifas das 3 categorias de tarifa', t.tariffs?.map((x) => x.category).join(',') === 'moto,economy,comfort' && t.step === 50);
+    const sim = (b) => call('POST', `${P}/admin/tarifas/simular`, admin.token, b);
+    r = await sim({ category: 'economy', km: 8, min: 20 });
+    check('simulador: 8 km e 20 min de Económico = 3 100 Kz', r.subtotal === 3100 && r.total === 3100, JSON.stringify(r));
+    r = await sim({ category: 'moto', km: 1, min: 2 });
+    check('simulador: corrida curta fica pelo mínimo', r.usedMinimum === true && r.total === 600, JSON.stringify(r));
+    r = await sim({ category: 'economy', km: 8, min: 20, multiplier: 1.2, stops: 1 });
+    check('simulador: ×1,2 arredonda para cima a 50 e soma a paragem', r.surged === 3720 && r.rounded === 3750 && r.total === 3950, JSON.stringify(r));
+    const sp = await otp('923000951', 'passenger');
+    await call('PATCH', '/me', sp.token, { name: 'Passageira Tarifas' });
+    const trip = { pickup: here, dropoff: there };
+    const e0 = await call('POST', '/rides/estimate', sp.token, trip);
+    check('sem taxa por procura, a estimativa não traz aviso', e0.surge === null);
+    const tariffs = Object.fromEntries(t.tariffs.map((x) => [x.category, { base: x.base, perKm: x.perKm, perMin: x.perMin, minimum: x.minimum }]));
+    check('mínimo que não é múltiplo de 50 é recusado', (await call('POST', `${P}/admin/tarifas`, admin.token, { tariffs: { ...tariffs, economy: { ...tariffs.economy, minimum: 1020 } }, stopFee: 200 })).s === 400);
+    r = await call('POST', `${P}/admin/tarifas`, admin.token, { tariffs: { ...tariffs, economy: { ...tariffs.economy, base: tariffs.economy.base + 1000 } }, stopFee: 300 });
+    check('o administrador altera a tarifa', r.s === 200 && r.tariffs.find((x) => x.category === 'economy').base === tariffs.economy.base + 1000 && r.stopFee === 300);
+    const e1 = await call('POST', '/rides/estimate', sp.token, trip);
+    check('a nova tarifa chega à estimativa', eco(e1) === eco(e0) + 1000 && e1.stopFee === 300, `${eco(e0)} → ${eco(e1)}`);
+    await call('POST', `${P}/admin/tarifas`, admin.token, { tariffs, stopFee: 200 });
+    const surge = t.surge;
+    check('multiplicador acima do tecto é recusado', (await call('POST', `${P}/admin/tarifas/procura`, admin.token, { ...surge, maxMultiplier: 1.5, schedules: [{ label: 'Noite', days: [0, 1, 2, 3, 4, 5, 6], start: '22:00', end: '05:00', multiplier: 2 }] })).s === 400);
+    check('hora inválida é recusada', (await call('POST', `${P}/admin/tarifas/procura`, admin.token, { ...surge, schedules: [{ label: 'Noite', days: [1], start: '25:00', end: '05:00', multiplier: 1.2 }] })).s === 400);
+    r = await call('POST', `${P}/admin/tarifas/procura`, admin.token, { ...surge, schedules: [{ label: 'Horário de teste', days: [0, 1, 2, 3, 4, 5, 6], start: '00:00', end: '00:00', multiplier: 1.5 }] });
+    check('o horário fica em vigor', r.s === 200 && r.now.schedule?.label === 'Horário de teste');
+    const e2 = await call('POST', '/rides/estimate', sp.token, trip);
+    const expected = (await sim({ category: 'economy', km: e2.distanceM / 1000, min: e2.durationS / 60, multiplier: 1.5 })).total;
+    check('a estimativa traz o horário e o preço já multiplicado', e2.surge?.multiplier === 1.5 && e2.surge.label === 'Horário de teste' && eco(e2) === expected, `${eco(e2)} vs ${expected}`);
+    // O preço que o passageiro viu vale ao pedir, mesmo que a taxa mude entretanto.
+    await call('POST', `${P}/admin/tarifas/procura`, admin.token, { ...surge, schedules: [] });
+    r = await call('POST', '/rides', sp.token, { pickup: { ...here, address: 'Mutamba' }, dropoff: { ...there, address: 'Ilha' }, category: 'economy', paymentMethod: 'cash' });
+    check('ao pedir, vale o preço da estimativa (com a taxa que viu)', r.ride?.fare === eco(e2) && r.ride.surge?.multiplier === 1.5 && r.ride.surge.label === 'Horário de teste', JSON.stringify(r.ride?.surge));
+    await call('POST', `/rides/${r.ride.id}/cancel`, sp.token);
+    // Procura automática: um pedido à procura e nenhum motorista livre por perto.
+    r = await call('POST', `${P}/admin/tarifas/procura`, admin.token, { ...surge, autoEnabled: true, radiusKm: 3, windowMin: 10, tiers: [{ ratio: 1, multiplier: 1.3 }], schedules: [{ label: 'Tarifa nocturna', days: [0, 1, 2, 3, 4, 5, 6], start: '00:00', end: '00:00', multiplier: 1.2 }] });
+    // Recolha longe dos motoristas de teste (Viana): 1 pedido (o novo) e 0 livres → 1 por motorista.
+    const far = { pickup: { lat: -8.905, lng: 13.374 }, dropoff: { lat: -8.89, lng: 13.36 } };
+    const e3 = await call('POST', '/rides/estimate', sp.token, far);
+    check('procura e horário ao mesmo tempo: vale o maior, não se somam', e3.surge?.multiplier === 1.3 && e3.surge.reason === 'demand' && e3.surge.label === 'Procura alta', JSON.stringify(e3.surge));
+    r = await call('POST', `${P}/admin/tarifas/procura`, admin.token, { ...surge, autoEnabled: true, tiers: [{ ratio: 5, multiplier: 1.3 }], maxMultiplier: 1.3, schedules: [] });
+    check('abaixo do escalão (menos de 5 pedidos por motorista livre), o preço não sobe', (await call('POST', '/rides/estimate', sp.token, trip)).surge === null);
+    check('o tecto limita os escalões', r.s === 200);
+    await call('POST', `${P}/admin/tarifas/procura`, admin.token, surge);
+    check('desligada a taxa, o preço volta ao normal', (await call('POST', '/rides/estimate', sp.token, trip)).surge === null);
   }
 
   // Suporte
@@ -417,7 +538,8 @@ async function run() {
     const before = (await call('GET', '/driver/account', cam.token)).vehicles[0].paidUntil;
     check('o motorista comunica o pagamento da mensalidade de uma viatura', r.s === 201 && r.request.amount === 45000 && r.request.status === 'pending');
     check('não se repete um pagamento ainda por confirmar', (await call('POST', '/driver/payments', cam.token, { kind: 'subscription', vehicleId: row.vehicleId, months: 1, method: 'cash' })).s === 409);
-    check('comissão: não se paga mais do que se deve', (await call('POST', '/driver/payments', cam.token, { kind: 'commission', amount: 500, method: 'cash' })).s === 400);
+    check('carregamento comunicado sem valor é recusado', (await call('POST', '/driver/payments', cam.token, { kind: 'commission', amount: 0, method: 'cash' })).s === 400);
+    check('sem saldo, a mensalidade não se paga com o saldo', (await call('POST', '/driver/subscription/pay', cam.token, { vehicleId: row.vehicleId, months: 1 })).s === 402);
     const pend = await call('GET', `${P}/admin/pagamentos`, admin.token);
     check('o painel vê o pagamento por confirmar', pend.pending === 1 && pend.requests[0].plate === 'LD-91-91-CM' && pend.requests[0].reference === 'TRF 99812');
     check('rejeitar exige motivo', (await call('POST', `${P}/admin/pagamentos/${pend.requests[0].id}`, admin.token, { approve: false })).s === 400);
@@ -425,6 +547,10 @@ async function run() {
     r = await call('GET', '/driver/account', cam.token);
     check('a mensalidade da viatura é prolongada 3 meses', new Date(r.vehicles[0].paidUntil) - new Date(before) > 85 * 86_400_000 && r.requests[0].status === 'confirmed');
     check('o painel soma o que recebeu', (await call('GET', `${P}/admin/mensalidades`, admin.token)).receivedThisMonth === 75000);
+    await call('POST', `${P}/admin/comissoes/${cam.user.id}/pagamento`, admin.token, { amount: 20000 });
+    const until0 = (await call('GET', '/driver/account', cam.token)).vehicles[0].paidUntil;
+    r = await call('POST', '/driver/subscription/pay', cam.token, { vehicleId: row.vehicleId, months: 1 });
+    check('a mensalidade paga-se com o saldo', r.s === 200 && new Date(r.paidUntil) - new Date(until0) > 27 * 86_400_000 && r.account.balance.amount === 5000 && r.account.entries[0].type === 'charge' && /Mensalidade/.test(r.account.entries[0].note));
     await call('POST', `${P}/admin/mensalidades/taxas`, admin.token, { fees: { truck: 0, pickup: 0 } });
     await call('POST', '/driver/online', cam.token, { online: false });
     await call('DELETE', '/me', cam.token);
@@ -566,6 +692,9 @@ async function run() {
     r = await call('POST', '/rides/estimate', emp.token, trip2);
     check('o colaborador passa a poder escolher "conta da empresa"', r.paymentMethods[0] === 'corporate' && r.company.name === 'Hotel Kianda' && r.company.remaining === 6000);
     const cd = await makeDriver('923000702', 'Motorista Empresa', 'LD-70-70-EE');
+    // Sem viagens grátis, com saldo para a taxa.
+    await call('POST', `${P}/admin/motoristas/${cd.user.id}/viagens-gratis`, admin.token, { count: 0 });
+    await call('POST', `${P}/admin/comissoes/${cd.user.id}/pagamento`, admin.token, { amount: 2000 });
     await call('POST', '/driver/online', cd.token, { online: true, location: { lat: -8.8383, lng: 13.2344 } });
     const before = (await call('GET', '/driver/account', cd.token)).commission.due;
     r = await call('POST', '/rides', emp.token, { ...trip2, category: 'economy', paymentMethod: 'corporate' });
@@ -577,10 +706,10 @@ async function run() {
     const net = cr.fare - Math.round(cr.fare * 0.15);
     check('o motorista não cobra: fica com o valor a receber do Bazá', acc.commission.due === before - net && acc.entries[0].type === 'credit' && acc.entries[0].amount === net);
     r = await call('GET', `${P}/admin/comissoes`, admin.token);
-    const owe = r.toPay.find((d) => d.name === 'Motorista Empresa');
-    check('o painel mostra o que o Bazá deve ao motorista', owe?.amount === net && r.totalToPay >= net && r.drivers.every((d) => d.name !== 'Motorista Empresa'));
-    check('não se paga mais do que se deve', (await call('POST', `${P}/admin/comissoes/${cd.user.id}/pagar-motorista`, admin.token, { amount: net + 1 })).s === 400);
-    check('o Bazá paga ao motorista e o saldo fica a zero', (await call('POST', `${P}/admin/comissoes/${cd.user.id}/pagar-motorista`, admin.token, { amount: net, note: 'Transferência' })).due === 0);
+    const owe = r.balances.find((d) => d.name === 'Motorista Empresa');
+    check('o valor da corrida entra no saldo do motorista', owe?.balance === 2000 + net && r.drivers.every((d) => d.name !== 'Motorista Empresa'));
+    check('não se devolve mais do que o saldo', (await call('POST', `${P}/admin/comissoes/${cd.user.id}/pagar-motorista`, admin.token, { amount: 2000 + net + 1 })).s === 400);
+    check('o Bazá devolve o saldo e fica a zero', (await call('POST', `${P}/admin/comissoes/${cd.user.id}/pagar-motorista`, admin.token, { amount: 2000 + net, note: 'Transferência' })).due === 0);
     check('acima do limite do mês, a empresa deixa de pagar', (await call('POST', '/rides', emp.token, { ...trip2, dropoff: { lat: -8.9147, lng: 13.1869, address: 'Talatona' }, category: 'comfort', paymentMethod: 'corporate' })).s === 402);
     const month = new Date().toISOString().slice(0, 7);
     r = await call('GET', `${P}/admin/empresas/${cid}/conta?mes=${month}`, admin.token);
@@ -927,7 +1056,7 @@ if (await fetch(`${B}/health`).then(() => true).catch(() => false)) {
 await mongoose.connect(DB);
 await mongoose.connection.dropDatabase();
 const server = spawn('npx', ['tsx', 'src/index.ts'], {
-  env: { ...process.env, PORT: String(PORT), MONGODB_URI: DB, JWT_SECRET: TEST_JWT_SECRET, NODE_ENV: 'development', ADMIN_EMAIL: '', ADMIN_PASSWORD: '', WALLET_ENABLED: 'false', ALERT_AUDIO_ENABLED: 'true', AUTO_APPROVE_DOCUMENTS: 'true', SMS_PROVIDER: 'console', SMS_FAIL_NUMBERS: '+244923000790,+244923000792,+244923000794', TELCOSMS_API_KEY: '', MAIL_TRANSPORT: 'console', TILE_UPSTREAM: '', FIREBASE_KEY_FILE: '' },
+  env: { ...process.env, PORT: String(PORT), MONGODB_URI: DB, JWT_SECRET: TEST_JWT_SECRET, NODE_ENV: 'development', ADMIN_EMAIL: '', ADMIN_PASSWORD: '', WALLET_ENABLED: 'false', ALERT_AUDIO_ENABLED: 'true', DRIVER_FREE_RIDES: '1000', PAYMENT_SIMULATION: 'all', PAYMENT_SIM_DELAY_S: '2', AUTO_APPROVE_DOCUMENTS: 'true', SMS_PROVIDER: 'console', SMS_FAIL_NUMBERS: '+244923000790,+244923000792,+244923000794', TELCOSMS_API_KEY: '', MAIL_TRANSPORT: 'console', TILE_UPSTREAM: '', FIREBASE_KEY_FILE: '' },
   stdio: ['ignore', 'pipe', 'pipe'],
   // Grupo de processos próprio: no fim mata-se o grupo todo (o npx lança o
   // servidor noutro processo, que sobrevivia e era apanhado pela corrida seguinte).

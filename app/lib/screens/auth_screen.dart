@@ -38,6 +38,9 @@ class _AuthScreenState extends State<AuthScreen> {
   /// A tecla Enter no último campo faz o mesmo que o botão principal.
   final _submitKey = GlobalKey<AsyncButtonState>();
 
+  /// Por onde foi o código, como o servidor o diz ("SMS", "WhatsApp"…).
+  String _via = 'SMS';
+
   /// Tempo de espera pelo SMS antes de se pedir a senha a quem a tem.
   static const _codeWait = Duration(seconds: 60);
 
@@ -163,6 +166,7 @@ class _AuthScreenState extends State<AuthScreen> {
       _reason = res['reason'] as String?;
       _devCode = res['devCode'] as String?;
       _canUsePassword = res['canUsePassword'] == true;
+      _via = res['via'] as String? ?? _via;
       _passwordToo = false;
       _code.clear();
       _password.clear();
@@ -354,9 +358,9 @@ class _AuthScreenState extends State<AuthScreen> {
       TextButton(onPressed: _restart, child: const Text('Usar outro número'));
 
   List<Widget> _codeStep() => [
-    const Text(
-      'Escreva o código que enviámos por SMS',
-      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+    Text(
+      'Escreva o código que enviámos por $_via',
+      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
     ),
     _who(),
     if (_devCode != null)

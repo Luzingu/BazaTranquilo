@@ -39,6 +39,11 @@ class DriverState extends ChangeNotifier {
 
   /// Como pagar comissões e mensalidades (texto definido pela equipa).
   String payInfo = '';
+
+  /// Nota da conta no ecrã principal (saldo, viagens grátis, mensalidade), já
+  /// escrita pelo servidor: { text, detail, alert }. null = sem nota.
+  Map<String, dynamic>? accountNote;
+  bool accountNoteFromServer = false;
   bool busy = false;
 
   StreamSubscription<Position>? _positions;
@@ -62,6 +67,10 @@ class DriverState extends ChangeNotifier {
       final res = await session.api.get('/driver/summary');
       ridesToday = (res['ridesToday'] as num).round();
       earningsToday = (res['earningsToday'] as num).round();
+      accountNoteFromServer = res.containsKey('note');
+      accountNote = res['note'] is Map
+          ? Map<String, dynamic>.from(res['note'] as Map)
+          : null;
       final c = res['commission'];
       if (c is Map) {
         commissionDue = (c['due'] as num? ?? 0).round();

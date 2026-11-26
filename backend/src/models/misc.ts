@@ -36,11 +36,28 @@ const paymentSchema = new Schema(
     user: { type: Schema.Types.ObjectId, required: true, index: true },
     role,
     amount: { type: Number, required: true },
-    purpose: { type: String, enum: ['topup', 'ride'], required: true },
+    /** topup: carregar a carteira; ride: corrida; driver_fee: comissões ou mensalidade do motorista. */
+    purpose: { type: String, enum: ['topup', 'ride', 'driver_fee'], required: true },
     ride: { type: Schema.Types.ObjectId, ref: 'Ride' },
     provider: { type: String, required: true },
-    providerRef: String,
-    status: { type: String, enum: ['pending', 'paid', 'failed'], default: 'pending' },
+    /** Forma de pagamento escolhida (id do catálogo do servidor, ex.: "multicaixa"). */
+    method: String,
+    providerRef: { type: String, index: true },
+    /**
+     * awaiting_input: à espera dos dados que o app pede (ex.: número);
+     * pending: à espera da confirmação do fornecedor; paid / failed / expired / cancelled: fim.
+     */
+    status: { type: String, enum: ['awaiting_input', 'pending', 'paid', 'failed', 'expired', 'cancelled'], default: 'pending', index: true },
+    /** O que o app mostra (mensagem, campos a pedir, dados a copiar, link), definido pelo fornecedor. */
+    view: { type: Schema.Types.Mixed, default: {} },
+    /** Até quando o pagamento pode ser concluído. */
+    expiresAt: Date,
+    /** Dados do motivo (ex.: { kind: 'subscription', vehicleId, months }). */
+    meta: { type: Schema.Types.Mixed, default: {} },
+    /** Pagamento de teste (fornecedor simulado): não houve dinheiro real. */
+    simulated: { type: Boolean, default: false },
+    settledAt: Date,
+    failureReason: String,
   },
   { timestamps: true },
 );

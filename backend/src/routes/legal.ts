@@ -149,10 +149,12 @@ const terms = () => {
 
 <h2>10. O que o Motorista paga ao Bazá</h2>
 <ul>
-<li><b>Corridas com tarifa e viagens entre municípios:</b> uma comissão sobre o valor de cada serviço, na percentagem indicada na Aplicação no momento do pedido ou da conclusão da viagem.</li>
-<li><b>Serviços de preço a combinar:</b> em vez de comissão, uma mensalidade por cada viatura registada, no valor indicado na Aplicação para o tipo de viatura. Sem a mensalidade em dia, a viatura não pode receber pedidos.</li>
-<li>Os valores em dívida e os pagamentos constam de "Pagamentos e mensalidades". O Bazá pode limitar a actividade do Motorista enquanto houver valores por pagar.</li>
-<li>O Bazá pode alterar as percentagens e as mensalidades, avisando os Motoristas na Aplicação. As alterações só se aplicam aos serviços pedidos e aos períodos pagos depois do aviso.</li>
+<li><b>Saldo pré-pago:</b> o Motorista carrega o saldo na Aplicação (por referência de pagamento ou por transferência confirmada pela equipa). Os valores do Bazá descontam-se desse saldo. Sem saldo para a taxa de uma corrida, o Motorista não a recebe.</li>
+<li><b>Corridas com tarifa:</b> uma taxa sobre o valor de cada corrida, na percentagem indicada na Aplicação no momento do pedido, descontada do saldo no fim da corrida. Cada conta nova de Motorista começa com o número de viagens grátis (sem taxa) indicado na Aplicação.</li>
+<li><b>Viagens entre municípios:</b> uma comissão sobre o valor dos lugares confirmados, na percentagem indicada na Aplicação no momento da conclusão da viagem.</li>
+<li><b>Serviços de preço a combinar:</b> em vez de comissão, uma mensalidade por cada viatura registada, no valor indicado na Aplicação para o tipo de viatura, paga com o saldo. Sem a mensalidade em dia, a viatura não pode receber pedidos.</li>
+<li>O saldo, as viagens grátis e todos os movimentos constam de "O meu saldo".</li>
+<li>O Bazá pode alterar as percentagens, as viagens grátis e as mensalidades, avisando os Motoristas na Aplicação. As alterações só se aplicam aos serviços pedidos e aos períodos pagos depois do aviso.</li>
 </ul>
 
 <h2>11. Segurança</h2>
@@ -227,7 +229,7 @@ const privacy = () => {
 <li><b>Prestar o serviço que pediu</b> (execução do contrato): criar e proteger a conta, ligar passageiros a motoristas, calcular rotas e preços, mostrar a viagem no mapa, emitir recibos, enviar avisos sobre a corrida.</li>
 <li><b>Segurança</b> (interesse legítimo e protecção das pessoas): verificar a identidade e os documentos dos motoristas, responder a alertas SOS, prevenir fraude, abuso e cancelamentos abusivos.</li>
 <li><b>Apoio ao cliente</b> e resolução de reclamações.</li>
-<li><b>Contas com os motoristas:</b> calcular e cobrar comissões e mensalidades.</li>
+<li><b>Contas com os motoristas:</b> gerir o saldo pré-pago, os carregamentos, as taxas e as mensalidades.</li>
 <li><b>Obrigações legais</b>, incluindo fiscais e de resposta a pedidos das autoridades.</li>
 <li><b>Melhorar o serviço:</b> estatísticas sem identificação de pessoas.</li>
 </ul>
@@ -239,7 +241,7 @@ const privacy = () => {
 <li><b>Pessoas com quem partilhar a viagem:</b> quem receber a sua ligação de partilha vê o percurso, o motorista e a viatura dessa viagem, enquanto ela decorre.</li>
 <li><b>Contacto de emergência:</b> se accionar o SOS e escolher enviar-lhe a sua viagem.</li>
 <li><b>Frotas:</b> se um motorista pertencer a uma frota, o gestor da frota vê os seus dados profissionais, a sua posição quando está online e as suas corridas.</li>
-<li><b>Prestadores de serviços</b> que trabalham por nossa conta: envio de SMS e de e-mail, alojamento dos servidores e envio de notificações (Google Firebase). Só recebem o necessário para a função e não podem usar os dados para outros fins. Alguns destes prestadores têm servidores fora de Angola; nesses casos, a transferência é feita com as garantias exigidas pela lei.</li>
+<li><b>Prestadores de serviços</b> que trabalham por nossa conta: envio de SMS e de e-mail, alojamento dos servidores, envio de notificações (Google Firebase) e actualizações da aplicação (Shorebird, que recebe só dados técnicos: a aplicação, a versão, o sistema e um identificador aleatório da instalação). Só recebem o necessário para a função e não podem usar os dados para outros fins. Alguns destes prestadores têm servidores fora de Angola; nesses casos, a transferência é feita com as garantias exigidas pela lei.</li>
 <li><b>Polícia, quando acciona o alerta de perigo:</b> os agentes dos postos policiais mais próximos, registados no Bazá, vêem a sua viagem enquanto o alerta estiver aberto — o seu nome e telefone, os do motorista ou passageiro que vai consigo, a viatura, o percurso e a posição actual${config.alertAudioEnabled ? ' — e ouvem o som, se o partilhar' : ''}. Deixam de ter acesso quando o alerta é fechado, e cada acesso fica registado. Fora de um alerta, a polícia não consulta dados no Bazá.</li>
 <li><b>Pessoa de confiança, quando acciona o alerta de perigo:</b> se o seu contacto de emergência tiver conta no Bazá, vê e ouve o mesmo que a polícia, enquanto o alerta estiver aberto.</li>
 <li><b>Outras autoridades:</b> quando a lei o exigir ou mediante pedido válido de uma autoridade competente.</li>

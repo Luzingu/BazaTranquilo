@@ -24,7 +24,10 @@ import { FleetModel } from '../models/panel.js';
 import { ACTIVE_STATUSES, RideModel } from '../models/Ride.js';
 import { clearSearchCache, haversineM, regionOf, reverseGeocode, searchPlaces } from '../services/geo.js';
 import { adjustWallet, createPayment, electronicPaymentsAvailable } from '../services/payments.js';
-import { PAYMENT_METHODS, createPaymentRequest, driverAccount, requestOut } from '../services/billing.js';
+import { PAYMENT_METHODS, accountNote, createPaymentRequest, driverAccount, paySubscriptionFromBalance, requestOut } from '../services/billing.js';
+import { createTopup, sessionView } from '../services/gateway.js';
+import { PaymentModel } from '../models/misc.js';
+import { balanceOf, freeRidesLeft } from '../services/balance.js';
 import { companyStatus } from '../services/corporate.js';
 import { settings } from '../services/settings.js';
 import {
@@ -255,7 +258,7 @@ ridesRouter.post('/estimate', requirePassenger, async (req, res) => {
   const company = verified ? await companyStatus(req.passenger.phone) : null;
   const companyLocked = !verified && Boolean(await companyStatus(req.passenger.phone));
   res.json({
-    ...(await estimate(body.pickup, body.dropoff, body.stops)),
+    ...(await estimate(body.pickup, body.dropoff, body.stops, req.passenger.id as string)),
     company,
     /** É colaborador de uma empresa, mas tem de confirmar o número para viajar por conta dela. */
     ...(companyLocked ? { companyLocked: true } : {}),
@@ -523,11 +526,15 @@ driverRouter.get('/summary', async (req, res) => {
     earningsToday: rides.reduce((sum, r) => sum + r.fare - r.commission, 0),
     currency: config.currency,
     commission: commissionState(req.driver),
+    /** Nota da conta no ecrã principal, já escrita pelo servidor (o app só a mostra). */
+    note: accountNote(req.driver),
   });
 });
 
-const commissionState = (d: { commissionDue: number }) => ({
+const commissionState = (d: { commissionDue: number; freeRidesLeft?: number | null }) => ({
   due: d.commissionDue,
+  balance: balanceOf(d),
+  freeRidesLeft: freeRidesLeft(d),
   rate: settings.commissionRate,
   limit: config.commission.debtLimit,
   enforced: config.commission.enforced,
@@ -552,6 +559,24 @@ driverRouter.post('/payments', async (req, res) => {
     req.body,
   );
   res.status(201).json({ request: requestOut(await createPaymentRequest(req.driver, body)) });
+});
+
+// ── Saldo pré-pago: carregar por referência e pagar a mensalidade com o saldo ──
+driverRouter.post('/topup', async (req, res) => {
+  const body = parse(z.object({ amount: z.coerce.number().int() }), req.body);
+  res.status(201).json({ payment: sessionView(await createTopup(req.driver, body.amount)) });
+});
+
+/** Referências geradas (as por pagar primeiro), para o motorista as voltar a ver. */
+driverRouter.get('/topups', async (req, res) => {
+  const list = await PaymentModel.find({ user: req.driver._id, role: 'driver', purpose: 'driver_fee' }).sort({ createdAt: -1 }).limit(10);
+  res.json({ payments: list.map(sessionView) });
+});
+
+driverRouter.post('/subscription/pay', async (req, res) => {
+  const body = parse(z.object({ vehicleId: objectId, months: z.coerce.number().int().min(1).max(24) }), req.body);
+  const until = await paySubscriptionFromBalance(req.driver, body.vehicleId, body.months);
+  res.json({ paidUntil: until, account: await driverAccount(req.driver) });
 });
 
 driverRouter.delete('/payments/:id', async (req, res) => {

@@ -34,6 +34,38 @@ export const config = {
     /** Como pagar, mostrado ao motorista no app. */
     payInfo: env.COMMISSION_PAY_INFO ?? 'Contacte a equipa do Bazá para saber como pagar a mensalidade ou a comissão.',
   },
+  /**
+   * Saldo pré-pago dos motoristas (decisão do dono, 2026-11-26). O motorista
+   * carrega o saldo (referência gerada pela API, ou transferência confirmada pela
+   * equipa) e cada corrida de tarifa desconta a taxa (a percentagem do painel).
+   * Sem saldo para a taxa de uma corrida, não a recebe. O saldo é o simétrico de
+   * `commissionDue` (conta-corrente em CommissionEntry): saldo = −commissionDue.
+   */
+  driverBalance: {
+    /** Viagens sem taxa para cada motorista novo (valor de arranque; muda-se no painel). */
+    freeRides: Number(env.DRIVER_FREE_RIDES ?? 10),
+    topupMin: 500,
+    topupMax: 500_000,
+    /** Valores sugeridos no ecrã de carregar. */
+    topupPresets: [1000, 2000, 5000, 10000],
+    /** Validade de uma referência gerada. */
+    referenceTtlHours: Number(env.REFERENCE_TTL_HOURS ?? 48),
+  },
+  /**
+   * Fornecedor das referências de pagamento. "simulado" gera referências de
+   * teste que se dão por pagas sozinhas (sem dinheiro real). Integrar um
+   * fornecedor real = escrever o adaptador em services/gateway.ts e mudar aqui.
+   */
+  payments: {
+    referenceProvider: env.REFERENCE_PROVIDER ?? 'simulado',
+    /** Simulação: "all" (todos), "testers" (só PAYMENT_SIM_PHONES) ou "off". */
+    simulation: env.PAYMENT_SIMULATION ?? (isDev ? 'all' : 'off'),
+    simPhones: (env.PAYMENT_SIM_PHONES ?? '').split(',').map((s) => s.replace(/\D/g, '').slice(-9)).filter(Boolean),
+    /** Segundos até uma referência simulada se dar por paga. */
+    simDelaySeconds: Number(env.PAYMENT_SIM_DELAY_S ?? 20),
+  },
+  /** Por onde vai o código de entrada, como o app o diz ("enviámos por SMS"). Mudar de canal = só servidor. */
+  otpChannelLabel: env.OTP_CHANNEL_LABEL ?? 'SMS',
   /** Mensalidade das viaturas de preço combinado: dias grátis ao registar a viatura. */
   subscriptionTrialDays: Number(env.SUBSCRIPTION_TRIAL_DAYS ?? 30),
   /** Cancelamentos tardios: quantos em 24 h levam à suspensão, e por quanto tempo. */

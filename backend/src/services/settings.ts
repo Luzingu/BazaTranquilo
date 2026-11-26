@@ -1,5 +1,6 @@
 import { SERVICE_KEYS, config, services } from '../config.js';
 import { SettingModel } from '../models/misc.js';
+import { loadPricing } from './pricing.js';
 
 // Definições que a equipa pode mudar no painel sem reiniciar o servidor.
 // Ficam na colecção `definicoes`; o valor de arranque vem de config.ts.
@@ -19,6 +20,8 @@ export const settings = {
   otpEnabled: true,
   /** Parte do valor de cada passageiro de uma viagem intermunicipal que fica para o Bazá. */
   intercityCommissionRate: 0.1,
+  /** Viagens sem taxa para cada motorista novo (fixadas na conta quando é criada). */
+  freeRides: config.driverBalance.freeRides,
 };
 
 /** Categorias de preço combinado, que pagam mensalidade em vez de comissão. */
@@ -33,6 +36,7 @@ export const commissionFor = (category: string, fare: number) =>
 export const MAX_COMMISSION_RATE = 0.5;
 
 export async function loadSettings() {
+  await loadPricing();
   const saved = await SettingModel.findOne({ key: 'commissionRate' });
   if (typeof saved?.value === 'number' && saved.value >= 0 && saved.value <= MAX_COMMISSION_RATE) {
     settings.commissionRate = saved.value;
@@ -43,6 +47,8 @@ export async function loadSettings() {
   if (typeof inter?.value === 'number' && inter.value >= 0 && inter.value <= MAX_COMMISSION_RATE) {
     settings.intercityCommissionRate = inter.value;
   }
+  const free = await SettingModel.findOne({ key: 'freeRides' });
+  if (typeof free?.value === 'number' && free.value >= 0) settings.freeRides = free.value;
   const fees = await SettingModel.findOne({ key: 'monthlyFees' });
   if (fees?.value && typeof fees.value === 'object') {
     for (const k of NEGOTIATED) {
@@ -62,6 +68,11 @@ export async function setMonthlyFees(fees: Record<string, number>, by: string) {
 export async function setIntercityCommissionRate(rate: number, by: string) {
   await SettingModel.updateOne({ key: 'intercityCommissionRate' }, { value: rate, by }, { upsert: true });
   settings.intercityCommissionRate = rate;
+}
+
+export async function setFreeRides(count: number, by: string) {
+  await SettingModel.updateOne({ key: 'freeRides' }, { value: count, by }, { upsert: true });
+  settings.freeRides = count;
 }
 
 export async function setOtpEnabled(enabled: boolean, by: string) {

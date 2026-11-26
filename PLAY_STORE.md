@@ -142,7 +142,7 @@ há publicidade.
 | Gravações de áudio | **Não** (a partilha do som num alerta está desligada; se se ligar: Sim, partilhado com a polícia, opcional, segurança) | — | — | — |
 | Mensagens no app (chat) | Sim | Com o outro interveniente da corrida | Não | Funcionalidade |
 | Histórico de compras (corridas, preços, pagamentos) | Sim | Não | Sim | Funcionalidade; contabilidade |
-| Identificadores do dispositivo (token de notificações) | Sim | Com o Google Firebase (envio de notificações) | Sim | Funcionalidade |
+| Identificadores do dispositivo (token de notificações; identificador aleatório da instalação) | Sim | Com o Google Firebase (notificações) e a Shorebird (actualizações do app) | Sim | Funcionalidade |
 | Diagnóstico / análise | Não | — | — | — |
 
 **«Partilha» que a Google não conta como partilha:** prestadores que trabalham por nossa conta

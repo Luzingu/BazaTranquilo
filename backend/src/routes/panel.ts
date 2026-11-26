@@ -6,7 +6,7 @@ import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
-import { config, service, services } from '../config.js';
+import { config, service, services, type RideCategory } from '../config.js';
 import { HttpError, parse } from '../http.js';
 import {
   DriverModel,
@@ -25,6 +25,7 @@ import {
   NoticeModel,
   SosAlertModel,
   SubscriptionPaymentModel,
+  PaymentModel,
   TicketModel,
   searchKeyOf,
 } from '../models/misc.js';
@@ -63,8 +64,23 @@ import {
   subscriptionState,
   setIntercityCommissionRate,
   setOtpEnabled,
+  setFreeRides,
 } from '../services/settings.js';
+import { balanceOf, freeRidesLeft } from '../services/balance.js';
+import { referenceMode, sessionView, settlePayment, simulationOn } from '../services/gateway.js';
 import { IntercityRouteModel, IntercityTripModel } from '../models/intercity.js';
+import {
+  DEFAULT_SURGE,
+  FARE_STEP,
+  TARIFF_KEYS,
+  activeSchedule,
+  fareBreakdown,
+  luandaClock,
+  pricing,
+  setSurge,
+  setTariffs,
+  tariffOf,
+} from '../services/pricing.js';
 import { smsBalance } from '../services/sms.js';
 import { emitToUser } from '../services/realtime.js';
 import { normalizePhone } from './auth.js';
@@ -1126,6 +1142,16 @@ admin.get('/comissoes', async (_req, res) => {
     enforced: config.commission.enforced,
     limit: config.commission.debtLimit,
     walletEnabled: config.walletEnabled,
+    /** Saldo pré-pago: viagens grátis dos motoristas novos e o saldo de cada motorista. */
+    freeRides: settings.freeRides,
+    balances: (await DriverModel.find({ deactivatedAt: { $exists: false } }).sort({ commissionDue: -1 }).limit(300)).map((d) => ({
+      id: d.id as string,
+      name: d.name || '(sem nome)',
+      phone: d.phone ?? null,
+      fleet: d.fleetName ?? null,
+      balance: balanceOf(d),
+      freeRidesLeft: freeRidesLeft(d),
+    })),
     totalDue: total[0]?.total ?? 0,
     drivers: owing.map((d) => ({
       id: d.id as string,
@@ -1281,6 +1307,41 @@ admin.post('/comissoes/:id/pagamento', async (req, res) => {
   res.json({ due: driver.commissionDue });
 });
 
+admin.post('/viagens-gratis', async (req, res) => {
+  const body = parse(z.object({ count: z.coerce.number().int().min(0).max(1000) }), req.body);
+  await setFreeRides(body.count, (await AdminModel.findById(req.panel.id))?.name ?? 'Administrador');
+  res.json({ freeRides: settings.freeRides });
+});
+
+/** Muda as viagens grátis que restam a um motorista (ex.: oferecer mais). */
+admin.post('/motoristas/:id/viagens-gratis', async (req, res) => {
+  const body = parse(z.object({ count: z.coerce.number().int().min(0).max(1000) }), req.body);
+  const driver = await DriverModel.findByIdAndUpdate(parse(objectId, req.params.id), { freeRidesLeft: body.count }, { returnDocument: 'after' });
+  if (!driver) throw new HttpError(404, 'Motorista não encontrado.');
+  emitToUser(driver.id, 'account:update', {});
+  res.json({ freeRidesLeft: freeRidesLeft(driver) });
+});
+
+/** Referências geradas pelos motoristas para carregar o saldo. */
+admin.get('/carregamentos', async (_req, res) => {
+  const list = await PaymentModel.find({ purpose: 'driver_fee' }).sort({ createdAt: -1 }).limit(100).populate('user', 'name phone');
+  res.json({
+    simulation: simulationOn(),
+    /** real | simulation | testers | off */
+    mode: referenceMode(),
+    payments: list.map((p) => ({ ...sessionView(p), driver: (p.user as unknown as { name?: string } | null)?.name ?? '(conta eliminada)', settledAt: p.settledAt ?? null })),
+  });
+});
+
+/** Simulação: dar uma referência de teste por paga (só referências simuladas). */
+admin.post('/carregamentos/:id/simular', async (req, res) => {
+  const payment = await PaymentModel.findById(parse(objectId, req.params.id));
+  if (!payment?.simulated) throw new HttpError(400, 'Só as referências de simulação se podem dar por pagas aqui.');
+  const done = await settlePayment(payment.id as string, 'paid', (await AdminModel.findById(req.panel.id))?.name ?? 'Administrador');
+  if (!done) throw new HttpError(409, 'Esta referência já não está por pagar.');
+  res.json({ ok: true });
+});
+
 admin.post('/comissoes/percentagem', async (req, res) => {
   const body = parse(z.object({ percent: z.coerce.number().min(0).max(MAX_COMMISSION_RATE * 100) }), req.body);
   const rate = Math.round(body.percent * 10) / 1000; // uma casa decimal: 12,5 % → 0,125
@@ -1334,6 +1395,79 @@ admin.get('/mensalidades', async (_req, res) => {
       createdAt: p.get('createdAt') as Date,
     })),
   });
+});
+
+// ── Tarifas e taxa por procura ──────────────────────────────────────────────
+
+const tariffsOut = () => ({
+  step: FARE_STEP,
+  stopFee: pricing.stopFee,
+  tariffs: TARIFF_KEYS.map((k) => {
+    const s = service(k);
+    return { category: k, label: s.label, ...tariffOf(k), defaults: { base: s.base, perKm: s.perKm, perMin: s.perMin, minimum: s.minimum } };
+  }),
+  surge: pricing.surge,
+  defaultSurge: DEFAULT_SURGE,
+  /** O que vale neste momento (hora de Luanda). */
+  now: (() => {
+    const c = luandaClock();
+    const sched = activeSchedule();
+    return { day: c.day, time: `${String(Math.floor(c.minutes / 60)).padStart(2, '0')}:${String(c.minutes % 60).padStart(2, '0')}`, schedule: sched ? { label: sched.label, multiplier: sched.multiplier } : null };
+  })(),
+});
+
+admin.get('/tarifas', (_req, res) => {
+  res.json(tariffsOut());
+});
+
+const kzField = (max: number) => z.coerce.number().int('Use números inteiros (kwanzas).').min(0).max(max);
+admin.post('/tarifas', async (req, res) => {
+  const tariff = z.object({ base: kzField(1_000_000), perKm: kzField(100_000), perMin: kzField(100_000), minimum: kzField(1_000_000) });
+  const body = parse(z.object({ tariffs: z.record(z.string(), tariff), stopFee: kzField(100_000) }), req.body);
+  for (const k of Object.keys(body.tariffs)) if (!(TARIFF_KEYS as string[]).includes(k)) throw new HttpError(400, `Categoria sem tarifa: ${k}.`);
+  for (const [k, t] of Object.entries(body.tariffs)) {
+    if (t.minimum % FARE_STEP !== 0) throw new HttpError(400, `${service(k as RideCategory).label}: o mínimo tem de ser múltiplo de ${FARE_STEP} Kz.`);
+  }
+  await setTariffs(body.tariffs, body.stopFee, (await AdminModel.findById(req.panel.id))?.name ?? 'Administrador');
+  res.json(tariffsOut());
+});
+
+const multiplier = z.coerce.number().min(1, 'O multiplicador mínimo é ×1.').max(3, 'O multiplicador máximo é ×3.');
+const clockTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Hora inválida (use HH:MM).');
+admin.post('/tarifas/procura', async (req, res) => {
+  const body = parse(
+    z.object({
+      autoEnabled: z.boolean(),
+      radiusKm: z.coerce.number().min(0.5).max(20),
+      windowMin: z.coerce.number().int().min(2).max(60),
+      tiers: z.array(z.object({ ratio: z.coerce.number().min(1).max(20), multiplier })).max(8),
+      schedules: z
+        .array(z.object({ label: z.string().trim().min(2, 'Dê um nome ao horário.').max(40), days: z.array(z.number().int().min(0).max(6)).min(1, 'Escolha pelo menos um dia.'), start: clockTime, end: clockTime, multiplier }))
+        .max(20),
+      maxMultiplier: multiplier,
+    }),
+    req.body,
+  );
+  if (body.tiers.some((t) => t.multiplier > body.maxMultiplier) || body.schedules.some((r) => r.multiplier > body.maxMultiplier)) {
+    throw new HttpError(400, `Nenhum multiplicador pode passar do tecto (×${body.maxMultiplier}).`);
+  }
+  await setSurge(body, (await AdminModel.findById(req.panel.id))?.name ?? 'Administrador');
+  res.json(tariffsOut());
+});
+
+/** Simulador: o cálculo de uma corrida, passo a passo, com as tarifas em vigor. */
+admin.post('/tarifas/simular', (req, res) => {
+  const body = parse(
+    z.object({
+      category: z.enum(TARIFF_KEYS as [string, ...string[]]),
+      km: z.coerce.number().min(0).max(1000),
+      min: z.coerce.number().min(0).max(1440),
+      stops: z.coerce.number().int().min(0).max(3).default(0),
+      multiplier: z.coerce.number().min(1).max(3).default(1),
+    }),
+    req.body,
+  );
+  res.json(fareBreakdown(body.category as RideCategory, body.km * 1000, body.min * 60, body.stops, body.multiplier));
 });
 
 admin.post('/mensalidades/taxas', async (req, res) => {
@@ -1529,7 +1663,7 @@ fleet.post('/motoristas', async (req, res) => {
     phone,
     'Esse número já tem conta de passageiro no Bazá. Cada número só pode ter um tipo de conta: o motorista tem de usar outro número.',
   );
-  await DriverModel.create({ name: body.name, phone, fleet: req.panel.id, fleetName: req.panel.fleet!.name });
+  await DriverModel.create({ name: body.name, phone, fleet: req.panel.id, fleetName: req.panel.fleet!.name, freeRidesLeft: settings.freeRides });
   res.status(201).json({ ok: true });
 });
 

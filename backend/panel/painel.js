@@ -136,7 +136,7 @@ const GROUPS = {
     ['Operação', ['corridas', 'mapa', 'intermunicipal', 'sos']],
     ['Pessoas', ['motoristas', 'revisoes', 'passageiros']],
     ['Instituições', ['frotas', 'empresas', 'postos']],
-    ['Finanças', ['pagamentos', 'comissoes', 'mensalidades']],
+    ['Finanças', ['tarifas', 'pagamentos', 'comissoes', 'mensalidades']],
     ['Atendimento', ['suporte', 'avisos', 'locais']],
     ['Sistema', ['definicoes', 'administradores']],
   ],
@@ -149,7 +149,7 @@ const GROUPS = {
 };
 const SECTION_ICON = {
   resumo: 'home', corridas: 'car', mapa: 'map', intermunicipal: 'bus', sos: 'alert', motoristas: 'wheel', revisoes: 'file',
-  passageiros: 'users', frotas: 'building', pagamentos: 'wallet', comissoes: 'percent', mensalidades: 'calendar',
+  passageiros: 'users', frotas: 'building', pagamentos: 'wallet', comissoes: 'percent', mensalidades: 'calendar', tarifas: 'trend',
   suporte: 'chat', avisos: 'bell', locais: 'pin', postos: 'star', empresas: 'building', contas: 'coins', acertos: 'wallet', viaturas: 'key', turnos: 'clock', utilizadores: 'users', consultas: 'file', definicoes: 'settings', administradores: 'shield',
 };
 /** Secção aberta (para o ícone do cabeçalho). */
@@ -306,7 +306,7 @@ const sections = {
             ${stat(s.online, `motoristas online (de ${s.drivers})`, false, 'wheel', 'green')}
             ${stat(s.onTrip, 'corridas a decorrer', false, 'car', 'yellow')}
             ${stat(s.passengers, 'passageiros registados', false, 'users', 'blue')}
-            ${stat(kz(s.commissionDue), 'comissões por receber', false, 'coins', 'amber')}
+            ${stat(kz(s.commissionDue), 'em falta nos saldos', false, 'coins', 'amber')}
           </div>
           <div class="split">
             <div class="panel">
@@ -330,7 +330,7 @@ const sections = {
                   <tr><th scope="row">Comissão do Bazá</th><td class="num">${kz(s.today.commission)}</td><td class="num">${kz(s.week.commission)}</td></tr>
                 </tbody>
               </table>
-              <p class="muted small">Comissão das corridas: ${esc(percentText(s.commissionRate))}. <a href="#definicoes">Alterar nas Definições</a></p>
+              <p class="muted small">Taxa por corrida (sai do saldo): ${esc(percentText(s.commissionRate))}. <a href="#definicoes">Alterar nas Definições</a></p>
             </div>
           </div>
           ${
@@ -674,7 +674,7 @@ const sections = {
         view.innerHTML =
           header(
             'Pagamentos',
-            'Pagamentos de mensalidades e comissões que os motoristas comunicaram no app. Confirme só depois de verificar que o dinheiro entrou.',
+            'Carregamentos do saldo (por transferência ou em dinheiro) e mensalidades que os motoristas comunicaram no app. Confirme só depois de verificar que o dinheiro entrou.',
             `<div class="inline-form">${tab('pending', `Por confirmar (${data.pending})`)}${tab('confirmed', 'Confirmados')}${tab('rejected', 'Rejeitados')}</div>`,
           ) +
           table(
@@ -686,7 +686,7 @@ const sections = {
                 <td>${
                   r.kind === 'subscription'
                     ? `Mensalidade · ${esc(r.months)} ${r.months === 1 ? 'mês' : 'meses'}<br><span class="muted">${esc(r.categoryLabel ?? '')} ${esc(r.plate ?? '')}</span>`
-                    : 'Comissões de corridas'
+                    : 'Carregamento do saldo'
                 }</td>
                 <td class="num"><strong>${kz(r.amount)}</strong></td>
                 <td>${esc(METHOD[r.method] ?? r.method)}${r.reference ? `<br><span class="muted">Ref.: ${esc(r.reference)}</span>` : ''}</td>
@@ -723,87 +723,106 @@ const sections = {
       },
     },
 
+    // Saldo pré-pago dos motoristas (o nome interno "comissões" fica: é a mesma conta-corrente).
     comissoes: {
-      label: 'Comissões',
+      label: 'Saldos dos motoristas',
       async render() {
-        const c = await api('/admin/comissoes');
+        const [c, t] = await Promise.all([api('/admin/comissoes'), api('/admin/carregamentos')]);
+        const STATUS = { pending: ['wait', 'Por pagar'], paid: ['ok', 'Paga'], expired: ['bad', 'Expirou'], cancelled: ['trip', 'Substituída'], failed: ['bad', 'Falhou'] };
+        const total = c.balances.reduce((n, d) => n + Math.max(0, d.balance), 0);
+        const free = c.rate <= 0;
         view.innerHTML =
-          header('Comissões', 'O que cada motorista deve ao Bazá pelas corridas e viagens pagas em dinheiro.') +
+          header('Saldos dos motoristas', `Os motoristas carregam o saldo e cada corrida desconta ${percentText(c.rate)} do preço. Sem saldo para a taxa de uma corrida, não a recebem.`) +
           `<div class="cards">
-            ${stat(kz(c.totalDue), 'por receber, no total', false, 'coins', 'amber')}
-            ${stat(c.drivers.length, 'motoristas com valores por pagar', false, 'wheel', 'blue')}
-            ${stat(percentText(c.rate), 'comissão por corrida', false, 'percent', 'yellow')}
+            ${stat(kz(total), 'em saldos, no total', false, 'coins', 'green')}
+            ${free ? stat('Gratuito', 'para os motoristas', false, 'check', 'green') : stat(c.balances.filter((d) => d.balance <= 0 && d.freeRidesLeft <= 0).length, 'sem saldo nem viagens grátis', false, 'alert', 'amber')}
+            ${stat(percentText(c.rate), 'taxa por corrida', false, 'percent', 'yellow')}
+            ${stat(c.freeRides, 'viagens grátis para cada motorista novo', false, 'star', 'blue')}
           </div>
-          <p class="notice">${
-            c.enforced
-              ? `Bloqueio activo: quem dever mais de ${kz(c.limit)} não pode ficar online.`
-              : `Por agora a dívida é só registada. O bloqueio automático acima de ${kz(c.limit)} está desligado (activa-se no servidor com COMMISSION_ENFORCED=true).`
-          }${c.walletEnabled ? ' Com a carteira ligada, as comissões saem da carteira do motorista e não aparecem aqui.' : ''} A percentagem altera-se em <a href="#definicoes">Definições</a>.</p>
-          <h2>Motoristas com comissões por pagar</h2>` +
+          ${free ? `<div class="allgood">${icon('check', 22)}<span><b>O Bazá está gratuito para os motoristas</b> (taxa a 0 %): as corridas não descontam nada e ninguém é bloqueado por falta de saldo. Para começar a cobrar, defina a taxa em <a href="#definicoes">Definições</a>.</span></div>` : ''}
+          <p class="notice">A taxa e as viagens grátis alteram-se em <a href="#definicoes">Definições</a>. Viaturas de preço combinado (triciclo, XL, carga) não descontam taxa: pagam a mensalidade com o saldo. ${
+            {
+              real: 'Os motoristas carregam por referência e o saldo aumenta sozinho quando o pagamento entra.',
+              simulation: '<b>Referências em modo de simulação:</b> não há dinheiro real; dão-se por pagas sozinhas ou com o botão abaixo.',
+              testers: '<b>Referências em simulação só para os números de teste</b> (PAYMENT_SIM_PHONES): sem dinheiro real. Os outros motoristas comunicam transferências.',
+              off: '<b>Referências ainda não disponíveis</b> (falta ligar o fornecedor de pagamentos): os motoristas transferem e comunicam o pagamento, e a equipa confirma em <a href="#pagamentos">Pagamentos</a> ou carrega aqui à mão.',
+            }[t.mode] ?? ''
+          }</p>
+          <h2>Motoristas</h2>` +
           table(
-            ['Motorista', 'Frota', { label: 'Deve', num: true }, ''],
-            c.drivers.map(
+            ['Motorista', 'Frota', { label: 'Saldo', num: true }, { label: 'Viagens grátis', num: true }, ''],
+            c.balances.map(
               (d) => `<tr>
                 <td><strong>${esc(d.name)}</strong><br><span class="muted">${esc(d.phone ?? '')}</span></td>
                 <td>${esc(d.fleet ?? '—')}</td>
-                <td class="num"><strong>${kz(d.due)}</strong>${d.overLimit ? `<br>${badge(['bad', 'Acima do limite'])}` : ''}</td>
-                <td class="num">${ibtn('plus', 'Registar pagamento', `data-pay="${esc(d.id)}" data-due="${esc(d.due)}" data-name="${esc(d.name)}"`, 'small primary')}</td>
+                <td class="num"><strong${d.balance < 0 ? ' style="color:var(--red)"' : ''}>${kz(d.balance)}</strong>${!free && d.balance <= 0 && d.freeRidesLeft <= 0 ? `<br>${badge(['bad', 'Não recebe pedidos'])}` : ''}</td>
+                <td class="num">${esc(d.freeRidesLeft)}</td>
+                <td class="num"><div class="row-actions">
+                  ${ibtn('plus', 'Carregar', `data-pay="${esc(d.id)}" data-name="${esc(d.name)}"`, 'small primary')}
+                  ${d.balance > 0 ? ibtn('wallet', 'Devolver', `data-payout="${esc(d.id)}" data-amount="${esc(d.balance)}" data-name="${esc(d.name)}"`, 'small') : ''}
+                  ${ibtn('star', 'Viagens grátis', `data-free="${esc(d.id)}" data-count="${esc(d.freeRidesLeft)}" data-name="${esc(d.name)}"`, 'small')}
+                </div></td>
               </tr>`,
             ),
-            'Nenhum motorista tem comissões por pagar.',
+            'Ainda não há motoristas.',
           ) +
-          (c.toPay.length
-            ? `<h2>A pagar aos motoristas</h2>
-               <p class="muted">Corridas por conta de empresas clientes: o passageiro não pagou ao motorista, por isso o Bazá deve-lhe o valor da corrida menos a comissão. Total: <strong>${kz(c.totalToPay)}</strong>.</p>` +
-              table(
-                ['Motorista', 'Frota', { label: 'A receber', num: true }, ''],
-                c.toPay.map(
-                  (d) => `<tr>
-                    <td><strong>${esc(d.name)}</strong><br><span class="muted">${esc(d.phone ?? '')}</span></td>
-                    <td>${esc(d.fleet ?? '—')}</td>
-                    <td class="num"><strong>${kz(d.amount)}</strong></td>
-                    <td class="num">${ibtn('check', 'Registar pagamento feito', `data-payout="${esc(d.id)}" data-amount="${esc(d.amount)}" data-name="${esc(d.name)}"`, 'small primary')}</td>
-                  </tr>`,
-                ),
-                '',
-              )
-            : '') +
-          '<h2>Últimos movimentos</h2>' +
+          '<h2>Referências geradas</h2>' +
+          table(
+            ['Data', 'Motorista', 'Referência', { label: 'Valor', num: true }, 'Estado', ''],
+            t.payments.map((p) => {
+              const ref = (p.details.find((x) => x.label === 'Referência') ?? {}).value ?? '—';
+              return `<tr><td>${esc(when(p.createdAt))}</td><td>${esc(p.driver)}</td><td>${esc(ref)}${p.simulated ? ' <span class="muted small">(simulação)</span>' : ''}</td><td class="num">${kz(p.amount)}</td><td>${badge(STATUS[p.status] ?? ['trip', p.status])}</td>
+                <td class="num">${p.simulated && p.status === 'pending' ? ibtn('check', 'Dar por paga', `data-sim="${esc(p.id)}"`, 'small') : ''}</td></tr>`;
+            }),
+            'Nenhum motorista gerou referências ainda.',
+          ) +
+          '<h2>Últimos carregamentos e devoluções</h2>' +
           table(
             ['Data', 'Motorista', 'Movimento', { label: 'Valor', num: true }, 'Nota', 'Registado por'],
             c.payments.map(
-              (p) => `<tr><td>${esc(when(p.createdAt))}</td><td>${esc(p.driver)}</td><td>${p.type === 'payout' ? badge(['trip', 'Pago ao motorista']) : badge(['ok', 'Recebido do motorista'])}</td><td class="num">${kz(p.amount)}</td><td>${esc(p.note || '—')}</td><td>${esc(p.by)}</td></tr>`,
+              (p) => `<tr><td>${esc(when(p.createdAt))}</td><td>${esc(p.driver)}</td><td>${p.type === 'payout' ? badge(['trip', 'Devolvido ao motorista']) : badge(['ok', 'Saldo carregado'])}</td><td class="num">${kz(p.amount)}</td><td>${esc(p.note || '—')}</td><td>${esc(p.by)}</td></tr>`,
             ),
-            'Ainda não foi registado nenhum pagamento.',
+            'Ainda não houve carregamentos.',
           );
-        view.querySelectorAll('[data-payout]').forEach(
-          (b) =>
-            (b.onclick = () =>
-              modal({
-                title: `Pagar a ${b.dataset.name}`,
-                intro: `O Bazá deve ${kz(Number(b.dataset.amount))}. Registe só depois de fazer o pagamento.`,
-                fields: [
-                  { name: 'amount', label: 'Valor pago (Kz)', type: 'number', min: 1, max: b.dataset.amount, value: b.dataset.amount },
-                  { name: 'note', label: 'Nota', required: false, maxlength: 120, placeholder: 'Ex.: transferência n.º …' },
-                ],
-                submit: 'Registar pagamento',
-                onSubmit: (v) => api(`/admin/comissoes/${b.dataset.payout}/pagar-motorista`, { method: 'POST', body: v }).then(() => go('comissoes')),
-              })),
-        );
         view.querySelectorAll('[data-pay]').forEach(
           (b) =>
             (b.onclick = () =>
               modal({
-                title: `Pagamento de ${b.dataset.name}`,
-                intro: `Deve ${kz(Number(b.dataset.due))}. Registe só o que já recebeu: o valor é abatido à dívida do motorista.`,
+                title: `Carregar o saldo de ${b.dataset.name}`,
+                intro: 'Para dinheiro entregue em mão ou uma transferência já verificada. O valor entra logo no saldo do motorista.',
                 fields: [
-                  { name: 'amount', label: 'Valor recebido (Kz)', type: 'number', min: 1, max: b.dataset.due, value: b.dataset.due },
-                  { name: 'note', label: 'Nota', required: false, maxlength: 120, placeholder: 'Ex.: dinheiro, transferência n.º …' },
+                  { name: 'amount', label: 'Valor recebido (Kz)', type: 'number', min: 1, step: 1 },
+                  { name: 'note', label: 'Nota', required: false, maxlength: 120, placeholder: 'Ex.: dinheiro no escritório, transferência n.º …' },
                 ],
-                submit: 'Registar pagamento',
+                submit: 'Carregar saldo',
                 onSubmit: (v) => api(`/admin/comissoes/${b.dataset.pay}/pagamento`, { method: 'POST', body: v }).then(() => go('comissoes')),
               })),
         );
+        view.querySelectorAll('[data-payout]').forEach(
+          (b) =>
+            (b.onclick = () =>
+              modal({
+                title: `Devolver saldo a ${b.dataset.name}`,
+                intro: `Tem ${kz(Number(b.dataset.amount))} de saldo (inclui o que o Bazá lhe deve de corridas por conta de empresas). Registe só depois de lhe pagar.`,
+                fields: [
+                  { name: 'amount', label: 'Valor devolvido (Kz)', type: 'number', min: 1, max: b.dataset.amount, value: b.dataset.amount },
+                  { name: 'note', label: 'Nota', required: false, maxlength: 120, placeholder: 'Ex.: transferência n.º …' },
+                ],
+                submit: 'Registar devolução',
+                onSubmit: (v) => api(`/admin/comissoes/${b.dataset.payout}/pagar-motorista`, { method: 'POST', body: v }).then(() => go('comissoes')),
+              })),
+        );
+        view.querySelectorAll('[data-free]').forEach(
+          (b) =>
+            (b.onclick = () =>
+              modal({
+                title: `Viagens grátis de ${b.dataset.name}`,
+                intro: 'Quantas corridas pode ainda fazer sem descontar a taxa.',
+                fields: [{ name: 'count', label: 'Viagens grátis', type: 'number', min: 0, max: 1000, step: 1, value: b.dataset.count }],
+                onSubmit: (v) => api(`/admin/motoristas/${b.dataset.free}/viagens-gratis`, { method: 'POST', body: v }).then(() => go('comissoes')),
+              })),
+        );
+        view.querySelectorAll('[data-sim]').forEach((b) => (b.onclick = () => act(b, () => api(`/admin/carregamentos/${b.dataset.sim}/simular`, { method: 'POST' }).then(() => go('comissoes')))));
       },
     },
 
@@ -1028,6 +1047,216 @@ const sections = {
       },
     },
 
+    // Tarifas das corridas (Moto, Económico, Conforto) e taxa por procura, com a
+    // fórmula à vista e um simulador. O cálculo é sempre o do servidor
+    // (services/pricing.ts): o simulador pergunta-lhe, não o repete aqui.
+    tarifas: {
+      label: 'Tarifas e procura',
+      async render() {
+        const t = await api('/admin/tarifas');
+        const again = () => sections.admin.tarifas.render();
+        const DAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+        const DAY_SETS = [
+          ['all', 'Todos os dias', [0, 1, 2, 3, 4, 5, 6]],
+          ['week', 'Dias úteis (seg. a sex.)', [1, 2, 3, 4, 5]],
+          ['weekend', 'Fim de semana (sáb. e dom.)', [0, 6]],
+          ...DAYS.map((d, i) => [`d${i}`, ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'][i], [i]]),
+        ];
+        const daysText = (days) => {
+          const key = [...days].sort().join(',');
+          const set = DAY_SETS.find(([, , d]) => d.join(',') === key);
+          return set ? set[1] : days.map((d) => DAYS[d]).join(', ');
+        };
+        const daysKey = (days) => DAY_SETS.find(([, , d]) => d.join(',') === [...days].sort().join(','))?.[0] ?? 'all';
+        const x = (m) => `×${String(Math.round(m * 100) / 100).replace('.', ',')}`;
+        const num = (n) => String(Math.round(n * 100) / 100).replace('.', ',');
+        const sv = t.surge;
+        const changed = (r) => ['base', 'perKm', 'perMin', 'minimum'].some((k) => r[k] !== r.defaults[k]);
+
+        view.innerHTML =
+          header('Tarifas e procura', 'Quanto custa uma corrida de Moto, Económico ou Conforto, e quando o preço sobe por haver muita procura. As alterações valem para os pedidos feitos a partir de agora.') +
+          `<div class="panel formula">
+            <h2>A fórmula</h2>
+            <div class="formula-box" aria-label="Fórmula do preço">
+              <div><span class="f-term">subtotal</span> = <span class="f-var">base</span> + <span class="f-var">km</span> × <span class="f-var">preço por km</span> + <span class="f-var">minutos</span> × <span class="f-var">preço por minuto</span></div>
+              <div><span class="f-term">preço</span> = <span class="f-op">(o maior entre</span> <span class="f-var">mínimo</span> <span class="f-op">e</span> <span class="f-term">subtotal</span><span class="f-op">)</span> × <span class="f-var">multiplicador da procura</span></div>
+              <div class="f-sub">arredondado para cima a ${esc(t.step)} Kz, mais ${kz(t.stopFee)} por cada paragem pelo caminho</div>
+            </div>
+            <ul class="f-legend">
+              <li><b>km e minutos</b> vêm da rota pelas estradas, calculada quando o passageiro escolhe o destino. O preço fica fixo: não muda com o trânsito real.</li>
+              <li><b>Mínimo</b>: nenhuma corrida custa menos, por mais curta que seja.</li>
+              <li><b>Multiplicador da procura</b>: ×1 quando não há taxa. É o maior entre a procura automática e o horário em vigor — nunca se somam — e nunca passa de ${esc(x(sv.maxMultiplier))}.</li>
+              <li>O passageiro pode propor entre 50 % e 300 % deste preço; a comissão do Bazá é sobre o valor final.</li>
+            </ul>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><div><h2>Tarifas por categoria</h2><p class="muted">Valores em kwanzas. Triciclo, XL e os serviços de carga não aparecem aqui: o preço é combinado com o motorista.</p></div>${ibtn('edit', 'Alterar tarifas', 'id="edit-tariffs"')}</div>
+            ${table(
+              ['Categoria', 'Base', 'Por km', 'Por minuto', 'Mínimo'],
+              t.tariffs.map(
+                (r) => `<tr><td><strong>${esc(r.label)}</strong>${changed(r) ? '' : ' <span class="muted small">(valores de origem)</span>'}</td><td class="num">${kz(r.base)}</td><td class="num">${kz(r.perKm)}</td><td class="num">${kz(r.perMin)}</td><td class="num">${kz(r.minimum)}</td></tr>`,
+              ),
+              '',
+            )}
+            <p class="muted small">Cada paragem pelo caminho: <b>${kz(t.stopFee)}</b>.</p>
+          </div>
+
+          <div class="panel">
+            <h2>Simulador</h2>
+            <p class="muted">Experimente uma corrida e veja o cálculo passo a passo, com as tarifas e as regras guardadas.</p>
+            <form class="sim" id="sim">
+              <label>Categoria<select name="category">${t.tariffs.map((r) => `<option value="${esc(r.category)}"${r.category === 'economy' ? ' selected' : ''}>${esc(r.label)}</option>`).join('')}</select></label>
+              <label>Distância (km)<input name="km" type="number" min="0" max="1000" step="0.1" value="8"></label>
+              <label>Duração (minutos)<input name="min" type="number" min="0" max="1440" step="1" value="20"></label>
+              <label>Paragens<input name="stops" type="number" min="0" max="3" step="1" value="0"></label>
+              <label>Multiplicador<input name="multiplier" type="number" min="1" max="3" step="0.05" value="1"></label>
+            </form>
+            <div id="sim-out" class="sim-out" aria-live="polite"></div>
+          </div>
+
+          <h2>Taxa por procura</h2>
+          <p class="muted">Quando há muitos pedidos e poucos motoristas, um preço maior atrai motoristas e paga melhor quem trabalha nessas horas. O passageiro vê o motivo ao lado do preço (por exemplo, «Procura alta · ×1,2» ou o nome do horário). O preço que viu é o que paga, mesmo que a procura mude entretanto.</p>
+          <div class="settings">
+            <div class="setting"><span class="card-ic ${sv.autoEnabled ? 'green' : 'amber'}">${icon('trend', 22)}</span><div class="body">
+              <h3>Procura automática</h3>
+              <div class="value">${badge(sv.autoEnabled ? ['ok', 'Ligada'] : ['wait', 'Desligada'])}</div>
+              <p class="muted">Conta, num raio de ${esc(num(sv.radiusKm))} km à volta da recolha, os pedidos à procura de motorista feitos nos últimos ${esc(sv.windowMin)} minutos (contando o novo) e os motoristas livres.</p>
+              ${sv.tiers.length ? `<ul class="tiers">${sv.tiers.map((r) => `<li>${esc(num(r.ratio))} ou mais pedidos por motorista livre → <b>${esc(x(r.multiplier))}</b></li>`).join('')}</ul>` : '<p class="muted">Sem escalões definidos.</p>'}
+            </div>${ibtn('edit', 'Alterar', 'id="edit-auto"')}</div>
+            <div class="setting"><span class="card-ic blue">${icon('percent', 22)}</span><div class="body">
+              <h3>Tecto</h3>
+              <div class="value">${esc(x(sv.maxMultiplier))}</div>
+              <p class="muted">O preço nunca é multiplicado por mais do que isto, venha a taxa da procura ou do horário.</p>
+            </div>${ibtn('edit', 'Alterar', 'id="edit-cap"')}</div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><div><h2>Horários</h2><p class="muted">Faixas com preço maior (hora de Luanda), por exemplo à noite ou nas horas de ponta. Uma faixa que passa a meia-noite (22:00 às 05:00) conta para o dia em que começa. Agora são ${esc(t.now.time)} de ${esc(['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'][t.now.day])}: ${t.now.schedule ? `está em vigor <b>${esc(t.now.schedule.label)}</b> (${esc(x(t.now.schedule.multiplier))}).` : 'nenhum horário em vigor.'}</p></div>${ibtn('plus', 'Novo horário', 'id="add-sched"', 'primary')}</div>
+            ${table(
+              ['Nome', 'Dias', 'Das', 'Às', 'Multiplicador', ''],
+              sv.schedules.map(
+                (r, i) => `<tr><td><strong>${esc(r.label)}</strong></td><td>${esc(daysText(r.days))}</td><td>${esc(r.start)}</td><td>${esc(r.end)}</td><td class="num"><b>${esc(x(r.multiplier))}</b></td>
+                  <td class="num"><div class="row-actions">${ibtn('edit', 'Editar', `data-edit-sched="${i}"`, 'small')}${ibtn('trash', 'Remover', `data-del-sched="${i}"`, 'small danger')}</div></td></tr>`,
+              ),
+              'Sem horários. O preço só sobe pela procura automática, se estiver ligada.',
+            )}
+          </div>`;
+
+        // Simulador: pede o cálculo ao servidor a cada alteração.
+        const sim = $('#sim');
+        const out = $('#sim-out');
+        let timer;
+        const simulate = async () => {
+          const v = Object.fromEntries(new FormData(sim).entries());
+          try {
+            const r = await api('/admin/tarifas/simular', { method: 'POST', body: v });
+            out.innerHTML = `<ol class="sim-steps">
+              <li><span>Base</span><b>${kz(r.tariff.base)}</b></li>
+              <li><span>${esc(num(r.km))} km × ${kz(r.tariff.perKm)}</span><b>${kz(r.kmPart)}</b></li>
+              <li><span>${esc(num(r.min))} min × ${kz(r.tariff.perMin)}</span><b>${kz(r.minPart)}</b></li>
+              <li class="sum"><span>Subtotal</span><b>${kz(r.subtotal)}</b></li>
+              ${r.usedMinimum ? `<li><span>Abaixo do mínimo: passa a ${kz(r.tariff.minimum)}</span><b>${kz(r.afterMinimum)}</b></li>` : ''}
+              ${r.multiplier > 1 ? `<li><span>Procura ${esc(x(r.multiplier))}</span><b>${kz(r.surged)}</b></li>` : ''}
+              <li><span>Arredondado a ${esc(t.step)} Kz</span><b>${kz(r.rounded)}</b></li>
+              ${r.stops ? `<li><span>${esc(r.stops)} ${r.stops === 1 ? 'paragem' : 'paragens'} × ${kz(r.stopFee)}</span><b>${kz(r.stopsPart)}</b></li>` : ''}
+              <li class="total"><span>Preço da corrida</span><b>${kz(r.total)}</b></li>
+            </ol>`;
+          } catch (err) {
+            out.innerHTML = `<p class="error">${esc(err.message || String(err))}</p>`;
+          }
+        };
+        sim.oninput = () => {
+          clearTimeout(timer);
+          timer = setTimeout(simulate, 250);
+        };
+        sim.onsubmit = (e) => e.preventDefault();
+        simulate();
+
+        $('#edit-tariffs').onclick = () =>
+          modal({
+            title: 'Alterar tarifas',
+            intro: `Valores em kwanzas, números inteiros. O mínimo tem de ser múltiplo de ${t.step} Kz. As corridas já pedidas mantêm o preço que tinham.`,
+            wide: true,
+            fields: [
+              ...t.tariffs.flatMap((r) => [
+                { name: `${r.category}.base`, label: `${r.label} · base`, type: 'number', min: 0, step: 1, value: r.base, half: true, hint: `Origem: ${r.defaults.base}` },
+                { name: `${r.category}.perKm`, label: `${r.label} · por km`, type: 'number', min: 0, step: 1, value: r.perKm, half: true, hint: `Origem: ${r.defaults.perKm}` },
+                { name: `${r.category}.perMin`, label: `${r.label} · por minuto`, type: 'number', min: 0, step: 1, value: r.perMin, half: true, hint: `Origem: ${r.defaults.perMin}` },
+                { name: `${r.category}.minimum`, label: `${r.label} · mínimo`, type: 'number', min: 0, step: t.step, value: r.minimum, half: true, hint: `Origem: ${r.defaults.minimum}` },
+              ]),
+              { name: 'stopFee', label: 'Cada paragem pelo caminho', type: 'number', min: 0, step: 1, value: t.stopFee, half: true },
+            ],
+            onSubmit: (v) => {
+              const tariffs = {};
+              for (const r of t.tariffs) tariffs[r.category] = { base: Number(v[`${r.category}.base`]), perKm: Number(v[`${r.category}.perKm`]), perMin: Number(v[`${r.category}.perMin`]), minimum: Number(v[`${r.category}.minimum`]) };
+              return api('/admin/tarifas', { method: 'POST', body: { tariffs, stopFee: Number(v.stopFee) } }).then(again);
+            },
+          });
+
+        const saveSurge = (patch) => api('/admin/tarifas/procura', { method: 'POST', body: { ...sv, ...patch } }).then(again);
+        const parseTiers = (text) =>
+          text
+            .split(/\n|;/)
+            .map((l) => l.trim())
+            .filter(Boolean)
+            .map((l) => {
+              const m = l.replace(/,/g, '.').match(/^([\d.]+)\s*[→>=:\-]+\s*[x×]?\s*([\d.]+)$/i);
+              if (!m) throw new Error(`Não percebi a linha «${l}». Escreva, por exemplo: 2 → 1,2`);
+              return { ratio: Number(m[1]), multiplier: Number(m[2]) };
+            });
+        $('#edit-auto').onclick = () =>
+          modal({
+            title: 'Procura automática',
+            intro: 'Por cada linha, um escalão: «pedidos por motorista livre → multiplicador». Exemplo: «2 → 1,2» quer dizer que, com 2 ou mais pedidos por cada motorista livre, o preço é multiplicado por 1,2. Vale o escalão mais alto atingido.',
+            fields: [
+              { name: 'autoEnabled', label: 'Estado', type: 'select', value: sv.autoEnabled ? '1' : '0', options: [['1', 'Ligada'], ['0', 'Desligada']] },
+              { name: 'radiusKm', label: 'Raio à volta da recolha (km)', type: 'number', min: 0.5, max: 20, step: 0.5, value: sv.radiusKm, half: true },
+              { name: 'windowMin', label: 'Pedidos dos últimos (minutos)', type: 'number', min: 2, max: 60, step: 1, value: sv.windowMin, half: true },
+              { name: 'tiers', label: 'Escalões', type: 'textarea', rows: 4, required: false, value: sv.tiers.map((r) => `${num(r.ratio)} → ${num(r.multiplier)}`).join('\n'), hint: `Multiplicadores entre 1 e ${num(sv.maxMultiplier)} (o tecto).` },
+            ],
+            onSubmit: (v) => saveSurge({ autoEnabled: v.autoEnabled === '1', radiusKm: Number(v.radiusKm), windowMin: Number(v.windowMin), tiers: parseTiers(v.tiers) }),
+          });
+        $('#edit-cap').onclick = () =>
+          modal({
+            title: 'Tecto do multiplicador',
+            intro: 'O preço nunca é multiplicado por mais do que este valor. Os escalões e os horários não podem passar dele.',
+            fields: [{ name: 'maxMultiplier', label: 'Tecto (×)', type: 'number', min: 1, max: 3, step: 0.05, value: sv.maxMultiplier }],
+            onSubmit: (v) => saveSurge({ maxMultiplier: Number(v.maxMultiplier) }),
+          });
+        const schedModal = (i) => {
+          const r = i === undefined ? { label: 'Tarifa nocturna', days: [0, 1, 2, 3, 4, 5, 6], start: '22:00', end: '05:00', multiplier: 1.2 } : sv.schedules[i];
+          modal({
+            title: i === undefined ? 'Novo horário' : 'Editar horário',
+            intro: 'O nome é o que o passageiro lê ao lado do preço. Para o dia inteiro, use a mesma hora nos dois campos (00:00 às 00:00).',
+            fields: [
+              { name: 'label', label: 'Nome', maxlength: 40, value: r.label, placeholder: 'Ex.: Hora de ponta' },
+              { name: 'days', label: 'Dias', type: 'select', value: daysKey(r.days), options: DAY_SETS.map(([k, label]) => [k, label]) },
+              { name: 'start', label: 'Das', type: 'time', value: r.start, half: true },
+              { name: 'end', label: 'Às', type: 'time', value: r.end, half: true },
+              { name: 'multiplier', label: 'Multiplicador (×)', type: 'number', min: 1, max: sv.maxMultiplier, step: 0.05, value: r.multiplier, hint: `Até ${num(sv.maxMultiplier)} (o tecto).` },
+            ],
+            onSubmit: (v) => {
+              const rule = { label: v.label, days: DAY_SETS.find(([k]) => k === v.days)[2], start: v.start, end: v.end, multiplier: Number(v.multiplier) };
+              const schedules = [...sv.schedules];
+              if (i === undefined) schedules.push(rule);
+              else schedules[i] = rule;
+              return saveSurge({ schedules });
+            },
+          });
+        };
+        $('#add-sched').onclick = () => schedModal();
+        view.querySelectorAll('[data-edit-sched]').forEach((b) => (b.onclick = () => schedModal(Number(b.dataset.editSched))));
+        view.querySelectorAll('[data-del-sched]').forEach(
+          (b) =>
+            (b.onclick = () => {
+              const r = sv.schedules[Number(b.dataset.delSched)];
+              if (!confirm(`Remover o horário «${r.label}»?`)) return;
+              act(b, () => saveSurge({ schedules: sv.schedules.filter((_, j) => j !== Number(b.dataset.delSched)) }));
+            }),
+        );
+      },
+    },
+
     // Tudo o que se configura fica aqui: percentagens, mensalidades e a forma de entrar no app.
     definicoes: {
       label: 'Definições',
@@ -1041,9 +1270,11 @@ const sections = {
           header('Definições', 'O que se pode ajustar sem mexer no servidor. Cada alteração fica em vigor de imediato.') +
           `<h2>Quanto o Bazá cobra</h2>
           <div class="settings">
-            ${setting('percent', 'yellow', 'Comissão das corridas', esc(percentText(c.rate)), 'Moto, Económico e Conforto. Aplica-se às corridas pedidas a partir da alteração.', ibtn('edit', 'Alterar', 'id="set-rate"'))}
+            ${setting('percent', c.rate <= 0 ? 'green' : 'yellow', 'Taxa por corrida', c.rate <= 0 ? `${esc(percentText(c.rate))} ${badge(['ok', 'Gratuito'])}` : esc(percentText(c.rate)), c.rate <= 0 ? 'Com 0 % o Bazá é totalmente gratuito para os motoristas: as corridas não descontam nada e ninguém precisa de saldo. Ao subir a percentagem, passa a descontar do saldo nas corridas pedidas a partir daí.' : 'Percentagem do preço de cada corrida de Moto, Económico e Conforto, descontada do saldo do motorista. Com 0 %, é gratuito. Aplica-se às corridas pedidas a partir da alteração.', ibtn('edit', 'Alterar', 'id="set-rate"'))}
+            ${setting('star', 'green', 'Viagens grátis para motoristas novos', esc(c.freeRides), 'Corridas sem taxa com que cada conta de motorista começa. Mudar este valor não altera as contas que já existem (isso faz-se em Saldos dos motoristas).', ibtn('edit', 'Alterar', 'id="set-free"'))}
             ${setting('bus', 'blue', 'Comissão intermunicipal', esc(percentText(i.commissionRate)), 'Sobre os lugares confirmados no app, quando o motorista conclui a viagem. Com 0, não há comissão.', ibtn('edit', 'Alterar', 'id="set-inter"'))}
           </div>
+          <p class="muted">As tarifas das corridas (base, km, minutos, mínimo) e a taxa por procura estão em <a href="#tarifas">Finanças › Tarifas e procura</a>.</p>
           <div class="panel">
             <div class="panel-head"><div><h2>Mensalidade por tipo de viatura</h2><p class="muted">Viaturas de preço combinado pagam por mês, por viatura registada. Com 0, o tipo é gratuito. Uma viatura nova tem ${esc(m.trialDays)} dias grátis a contar da primeira vez que fica online.</p></div>${ibtn('edit', 'Alterar valores', 'id="set-fees"')}</div>
             <div class="fees">${m.fees.map((f) => `<div><span class="muted">${esc(f.label)}</span><b>${f.fee ? kz(f.fee) : 'Gratuita'}</b></div>`).join('')}</div>
@@ -1069,7 +1300,14 @@ const sections = {
             fields: [{ name: 'percent', label: 'Percentagem (%)', type: 'number', min: 0, max: 50, step: 0.5, value: Math.round(value * 1000) / 10 }],
             onSubmit: (v) => api(path, { method: 'POST', body: v }).then(again),
           });
-        $('#set-rate').onclick = () => rateModal('Comissão das corridas', 'As corridas já pedidas mantêm a percentagem que tinham.', c.rate, '/admin/comissoes/percentagem');
+        $('#set-rate').onclick = () => rateModal('Taxa por corrida', 'Descontada do saldo do motorista. As corridas já pedidas mantêm a percentagem que tinham.', c.rate, '/admin/comissoes/percentagem');
+        $('#set-free').onclick = () =>
+          modal({
+            title: 'Viagens grátis para motoristas novos',
+            intro: 'Quantas corridas sem taxa tem cada conta de motorista criada a partir de agora. Com 0, não há viagens grátis.',
+            fields: [{ name: 'count', label: 'Viagens grátis', type: 'number', min: 0, max: 1000, step: 1, value: c.freeRides }],
+            onSubmit: (v) => api('/admin/viagens-gratis', { method: 'POST', body: v }).then(again),
+          });
         $('#set-inter').onclick = () => rateModal('Comissão intermunicipal', 'Vale para as viagens concluídas a partir de agora.', i.commissionRate, '/admin/intermunicipal/comissao');
         $('#set-fees').onclick = () =>
           modal({

@@ -7,15 +7,17 @@ import '../core/format.dart';
 import '../core/theme.dart';
 import '../state/session.dart';
 import '../widgets/common.dart';
+import '../widgets/payment_session.dart';
 
 const _methodLabels = {
   'transfer': 'Transferência ou depósito',
   'cash': 'Dinheiro, entregue à equipa',
 };
 
-/// Pagamentos do motorista ao Bazá: a mensalidade de cada viatura de preço
-/// combinado e as comissões das corridas em dinheiro. O motorista paga pelos
-/// meios indicados e comunica aqui o pagamento; a equipa confirma-o.
+/// O saldo do motorista no Bazá (pré-pago): carregar por referência (gerada
+/// pelo servidor) ou comunicar uma transferência, ver as viagens grátis, pagar a
+/// mensalidade das viaturas de preço combinado com o saldo e os movimentos.
+/// Os textos de regras vêm do servidor (`note`), para mudarem sem nova versão.
 class DriverAccountScreen extends StatefulWidget {
   const DriverAccountScreen({super.key});
 
@@ -28,6 +30,9 @@ class _DriverAccountScreenState extends State<DriverAccountScreen> {
   Map<String, dynamic>? _data;
   String? _error;
 
+  /// Referência ainda por pagar (a última gerada), para a voltar a mostrar.
+  Map<String, dynamic>? _pendingTopup;
+
   @override
   void initState() {
     super.initState();
@@ -37,10 +42,17 @@ class _DriverAccountScreenState extends State<DriverAccountScreen> {
   Future<void> _load() async {
     try {
       final res = await _api.get('/driver/account');
+      final topups = await _api
+          .get('/driver/topups')
+          .catchError((_) => <String, dynamic>{});
       if (mounted) {
         setState(() {
           _data = res;
           _error = null;
+          _pendingTopup = [
+            for (final p in (topups['payments'] as List? ?? const []))
+              Map<String, dynamic>.from(p as Map),
+          ].where((p) => p['status'] == 'pending').firstOrNull;
         });
       }
     } on ApiException catch (e) {
@@ -95,13 +107,68 @@ class _DriverAccountScreenState extends State<DriverAccountScreen> {
     }
   }
 
+  Map<String, dynamic> get _balance =>
+      Map<String, dynamic>.from(_data?['balance'] as Map? ?? const {});
+
+  /// Carregar o saldo: referência gerada pelo servidor, ou comunicar uma
+  /// transferência quando as referências ainda não estão disponíveis.
+  Future<void> _topUp() async {
+    final topup = Map<String, dynamic>.from(_balance['topup'] as Map? ?? {});
+    final result = await showModalBottomSheet<Object>(
+      context: context,
+      isDismissible: false,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _TopupSheet(
+        api: _api,
+        topup: topup,
+        payInfo: _data?['payInfo'] as String? ?? '',
+      ),
+    );
+    if (!mounted) return;
+    if (result is Map) {
+      await showPaymentSession(
+        context,
+        _api,
+        Map<String, dynamic>.from(result),
+      );
+    } else if (result == 'manual') {
+      await _pay();
+      return;
+    }
+    await _load();
+    if (mounted) context.read<Session>().refreshUser().catchError((_) {});
+  }
+
+  /// Mensalidade de uma viatura de preço combinado, paga com o saldo.
+  Future<void> _paySubscription(Map<String, dynamic> vehicle) async {
+    final paid = await showModalBottomSheet<bool>(
+      context: context,
+      isDismissible: false,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _SubscriptionSheet(
+        api: _api,
+        vehicle: vehicle,
+        balance: (_balance['amount'] as num? ?? 0).round(),
+      ),
+    );
+    if (paid == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Mensalidade paga com o saldo.')),
+      );
+    }
+    await _load();
+    if (mounted) context.read<Session>().refreshUser().catchError((_) {});
+  }
+
   @override
   Widget build(BuildContext context) {
     const section = TextStyle(fontWeight: FontWeight.w700, fontSize: 16);
     final data = _data;
     if (data == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Pagamentos e mensalidades')),
+        appBar: AppBar(title: const Text('O meu saldo')),
         body: Center(
           child: _error == null
               ? const CircularProgressIndicator(color: BazaColors.ink)
@@ -118,9 +185,11 @@ class _DriverAccountScreenState extends State<DriverAccountScreen> {
         ),
       );
     }
-    final commission = Map<String, dynamic>.from(data['commission'] as Map);
-    final due = (commission['due'] as num).round();
-    final rate = (commission['rate'] as num).toDouble() * 100;
+    final balance = (_balance['amount'] as num? ?? 0).round();
+    final freeRides = (_balance['freeRidesLeft'] as num? ?? 0).round();
+    final note = data['note'] is Map
+        ? Map<String, dynamic>.from(data['note'] as Map)
+        : null;
     final vehicles = _list('vehicles');
     final requests = _list('requests');
     final entries = _list('entries');
@@ -128,145 +197,177 @@ class _DriverAccountScreenState extends State<DriverAccountScreen> {
       for (final r in requests)
         if (r['status'] == 'pending') '${r['kind']}:${r['vehicleId'] ?? ''}',
     };
-    final payInfo = data['payInfo'] as String? ?? '';
+    final pending = _pendingTopup;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Pagamentos e mensalidades')),
+      appBar: AppBar(title: const Text('O meu saldo')),
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
           children: [
-            if (payInfo.isNotEmpty)
-              Container(
-                padding: const EdgeInsets.all(14),
-                margin: const EdgeInsets.only(bottom: 18),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFF4CC),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Como pagar',
-                      style: TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(payInfo),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Depois de pagar, comunique aqui o pagamento para a equipa o confirmar.',
-                      style: TextStyle(color: BazaColors.muted, fontSize: 13),
-                    ),
-                  ],
-                ),
-              ),
-            const Text('Mensalidade por viatura', style: section),
-            const SizedBox(height: 4),
-            const Text(
-              'Triciclos, XL, carrinhas e camiões combinam o preço com o cliente e não pagam comissão por serviço. Cada viatura registada paga a sua mensalidade.',
-              style: TextStyle(color: BazaColors.muted, fontSize: 13),
-            ),
-            if (vehicles.isEmpty)
-              const Padding(
-                padding: EdgeInsets.only(top: 10),
-                child: Text(
-                  'Não tem viaturas deste tipo registadas.',
-                  style: TextStyle(color: BazaColors.muted),
-                ),
-              ),
-            for (final v in vehicles)
-              _VehicleCard(
-                vehicle: v,
-                pending: pendingKinds.contains('subscription:${v['id']}'),
-                onPay: () => _pay(vehicle: v),
-              ),
-            const SizedBox(height: 26),
-            const Text('Comissões das corridas', style: section),
-            const SizedBox(height: 4),
-            Text(
-              'Nas corridas de moto e de carro, o Bazá fica com ${rate.toStringAsFixed(rate % 1 == 0 ? 0 : 1).replaceAll('.', ',')} % do valor. '
-              'Quando o passageiro paga em dinheiro, a comissão fica por pagar.',
-              style: const TextStyle(color: BazaColors.muted, fontSize: 13),
-            ),
+            // Saldo em destaque, com as viagens grátis e a regra (do servidor).
             Container(
-              margin: const EdgeInsets.only(top: 10),
-              padding: const EdgeInsets.all(14),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: BazaColors.surface,
-                borderRadius: BorderRadius.circular(16),
+                color: BazaColors.ink,
+                borderRadius: BorderRadius.circular(18),
               ),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Saldo negativo: o Bazá deve ao motorista (corridas por
-                        // conta de empresas, que o passageiro não paga).
-                        Text(
-                          due < 0 ? 'A receber do Bazá' : 'Por pagar',
-                          style: const TextStyle(color: BazaColors.muted),
-                        ),
-                        Text(
-                          kz(due.abs()),
-                          style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        if (commission['enforced'] == true)
-                          Text(
-                            'Limite para continuar online: ${kz((commission['limit'] as num).round())}',
-                            style: const TextStyle(
-                              color: BazaColors.muted,
-                              fontSize: 12,
-                            ),
-                          ),
-                      ],
+                  const Text(
+                    'Saldo',
+                    style: TextStyle(color: Colors.white70, fontSize: 15),
+                  ),
+                  Text(
+                    kz(balance),
+                    style: TextStyle(
+                      color: balance < 0
+                          ? const Color(0xFFFF8A80)
+                          : Colors.white,
+                      fontSize: 34,
+                      fontWeight: FontWeight.w900,
                     ),
                   ),
-                  if (pendingKinds.contains('commission:'))
-                    const Text(
-                      'A confirmar…',
-                      style: TextStyle(color: BazaColors.muted),
+                  if (freeRides > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.card_giftcard,
+                            color: BazaColors.yellow,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            freeRides == 1
+                                ? '1 viagem grátis'
+                                : '$freeRides viagens grátis',
+                            style: const TextStyle(
+                              color: BazaColors.yellow,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (note != null &&
+                      (note['detail'] as String? ?? '').isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        note['detail'] as String,
+                        style: const TextStyle(color: Colors.white70),
+                      ),
+                    ),
+                  const SizedBox(height: 14),
+                  // Taxa a 0 %: gratuito, não há nada a carregar.
+                  if (_balance['free'] == true)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: BazaColors.green.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(
+                            Icons.check_circle,
+                            color: Colors.white,
+                            size: 26,
+                          ),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Gratuito: não paga nada ao Bazá.',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     )
-                  else if (due > 0)
-                    FilledButton(
-                      style: _compact,
-                      onPressed: () => _pay(),
-                      child: const Text('Pagar'),
+                  else
+                    FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: BazaColors.yellow,
+                        foregroundColor: BazaColors.ink,
+                      ),
+                      onPressed: _topUp,
+                      icon: const Icon(Icons.add_card),
+                      label: const Text('Carregar saldo'),
                     ),
                 ],
               ),
             ),
+            if (pending != null)
+              Card(
+                margin: const EdgeInsets.only(top: 14),
+                child: ListTile(
+                  leading: const Icon(Icons.receipt_long, size: 30),
+                  title: Text(
+                    'Referência por pagar · ${kz((pending['amount'] as num).round())}',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: const Text(
+                    'Toque para ver a entidade e a referência.',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () async {
+                    await showPaymentSession(context, _api, pending);
+                    await _load();
+                  },
+                ),
+              ),
+            if (vehicles.isNotEmpty) ...[
+              const SizedBox(height: 26),
+              const Text('Mensalidade por viatura', style: section),
+              const SizedBox(height: 4),
+              const Text(
+                'Triciclos, XL, carrinhas e camiões combinam o preço com o cliente e não descontam taxa por corrida. Cada viatura paga a sua mensalidade, com o saldo.',
+                style: TextStyle(color: BazaColors.muted, fontSize: 13),
+              ),
+              for (final v in vehicles)
+                _VehicleCard(
+                  vehicle: v,
+                  pending: pendingKinds.contains('subscription:${v['id']}'),
+                  onPay: () => _paySubscription(v),
+                ),
+            ],
             if (requests.isNotEmpty) ...[
               const SizedBox(height: 26),
-              const Text('Pagamentos comunicados', style: section),
+              const Text('Carregamentos comunicados', style: section),
               for (final r in requests)
                 _RequestTile(request: r, onCancel: () => _cancel(r)),
             ],
             if (entries.isNotEmpty) ...[
               const SizedBox(height: 26),
-              const Text('Movimentos das comissões', style: section),
+              const Text('Movimentos do saldo', style: section),
               for (final e in entries.take(15))
                 ListTile(
                   dense: true,
                   contentPadding: EdgeInsets.zero,
                   leading: Icon(
-                    e['type'] == 'charge' ? Icons.north_east : Icons.south_west,
-                    color: e['type'] == 'charge'
+                    e['type'] == 'charge' || e['type'] == 'payout'
+                        ? Icons.north_east
+                        : Icons.south_west,
+                    color: e['type'] == 'charge' || e['type'] == 'payout'
                         ? BazaColors.muted
                         : BazaColors.green,
                   ),
                   title: Text(switch (e['type']) {
-                    'payment' => 'Pagamento seu ao Bazá',
+                    'payment' =>
+                      (e['note'] as String?) ?? 'Carregamento do saldo',
                     'credit' =>
                       (e['note'] as String?) ??
                           'Corrida por conta de uma empresa',
-                    'payout' => 'O Bazá pagou-lhe',
-                    _ => (e['note'] as String?) ?? 'Comissão de uma corrida',
+                    'payout' => 'Saldo devolvido',
+                    _ => (e['note'] as String?) ?? 'Taxa de uma corrida',
                   }),
                   subtitle: Text(
                     dateTime(
@@ -274,7 +375,7 @@ class _DriverAccountScreenState extends State<DriverAccountScreen> {
                     ),
                   ),
                   trailing: Text(
-                    '${e['type'] == 'charge' || e['type'] == 'payout' ? '+' : '−'} ${kz((e['amount'] as num).round())}',
+                    '${e['type'] == 'charge' || e['type'] == 'payout' ? '−' : '+'} ${kz((e['amount'] as num).round())}',
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ),
@@ -438,7 +539,9 @@ class _PaySheet extends StatefulWidget {
 
 class _PaySheetState extends State<_PaySheet> {
   final _reference = TextEditingController();
-  late final _amount = TextEditingController(text: '${widget.commissionDue}');
+  late final _amount = TextEditingController(
+    text: widget.commissionDue > 0 ? '${widget.commissionDue}' : '',
+  );
   int _months = 1;
   late String _method = widget.methods.firstOrNull ?? 'transfer';
 
@@ -488,7 +591,7 @@ class _PaySheetState extends State<_PaySheet> {
           children: [
             Text(
               vehicle == null
-                  ? 'Pagar comissões'
+                  ? 'Comunicar carregamento'
                   : 'Mensalidade · ${vehicle['plate']}',
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
             ),
@@ -535,9 +638,9 @@ class _PaySheetState extends State<_PaySheet> {
                   LengthLimitingTextInputFormatter(8),
                 ],
                 decoration: InputDecoration(
-                  labelText: 'Valor pago',
+                  labelText: 'Valor que transferiu ou entregou',
                   suffixText: 'Kz',
-                  helperText: 'Deve ${kz(widget.commissionDue)}',
+                  helperText: 'Entra no saldo quando a equipa confirmar.',
                 ),
               ),
             const SizedBox(height: 14),
@@ -571,6 +674,217 @@ class _PaySheetState extends State<_PaySheet> {
             AsyncButton(label: 'Comunicar pagamento', onPressed: _send),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Quanto carregar: valores sugeridos (do servidor) ou outro valor. Devolve a
+/// sessão de pagamento criada, ou 'manual' para comunicar uma transferência.
+class _TopupSheet extends StatefulWidget {
+  const _TopupSheet({
+    required this.api,
+    required this.topup,
+    required this.payInfo,
+  });
+  final ApiClient api;
+  final Map<String, dynamic> topup;
+  final String payInfo;
+
+  @override
+  State<_TopupSheet> createState() => _TopupSheetState();
+}
+
+class _TopupSheetState extends State<_TopupSheet> {
+  late final List<int> _presets = [
+    for (final v
+        in (widget.topup['presets'] as List? ?? const [1000, 2000, 5000]))
+      (v as num).round(),
+  ];
+  late int _amount = _presets.length > 1 ? _presets[1] : 2000;
+  final _custom = TextEditingController();
+
+  bool get _available => widget.topup['available'] == true;
+
+  @override
+  void dispose() {
+    _custom.dispose();
+    super.dispose();
+  }
+
+  Future<void> _generate() async {
+    final navigator = Navigator.of(context);
+    final res = await widget.api.post('/driver/topup', {'amount': _amount});
+    navigator.pop(Map<String, dynamic>.from(res['payment'] as Map));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        0,
+        20,
+        MediaQuery.viewInsetsOf(context).bottom + 20,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Carregar saldo',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 12),
+            if (_available) ...[
+              const Text(
+                'Quanto quer carregar?',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final v in _presets)
+                    ChoiceChip(
+                      label: Text(kz(v), style: const TextStyle(fontSize: 16)),
+                      selected: _amount == v && _custom.text.isEmpty,
+                      onSelected: (_) => setState(() {
+                        _custom.clear();
+                        _amount = v;
+                      }),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _custom,
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(7),
+                ],
+                decoration: InputDecoration(
+                  labelText: 'Outro valor',
+                  suffixText: 'Kz',
+                  helperText:
+                      'Entre ${kz((widget.topup['min'] as num? ?? 500).round())} e ${kz((widget.topup['max'] as num? ?? 500000).round())}',
+                ),
+                onChanged: (t) =>
+                    setState(() => _amount = int.tryParse(t) ?? 0),
+              ),
+              const SizedBox(height: 14),
+              AsyncButton(
+                label:
+                    '${widget.topup['label'] as String? ?? 'Gerar referência'} · ${kz(_amount)}',
+                onPressed: _amount > 0 ? _generate : null,
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Recebe uma entidade e uma referência para pagar no Multicaixa, no Multicaixa Express ou no banco. O saldo aumenta sozinho depois do pagamento.',
+                style: TextStyle(color: BazaColors.muted, fontSize: 13),
+              ),
+              const Divider(height: 28),
+            ] else if (widget.payInfo.isNotEmpty) ...[
+              Text(widget.payInfo),
+              const SizedBox(height: 12),
+            ],
+            OutlinedButton.icon(
+              onPressed: () => Navigator.of(context).pop('manual'),
+              icon: const Icon(Icons.receipt_long),
+              label: const Text('Já transferi ou paguei em dinheiro'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Pagar meses de mensalidade de uma viatura com o saldo.
+class _SubscriptionSheet extends StatefulWidget {
+  const _SubscriptionSheet({
+    required this.api,
+    required this.vehicle,
+    required this.balance,
+  });
+  final ApiClient api;
+  final Map<String, dynamic> vehicle;
+  final int balance;
+
+  @override
+  State<_SubscriptionSheet> createState() => _SubscriptionSheetState();
+}
+
+class _SubscriptionSheetState extends State<_SubscriptionSheet> {
+  int _months = 1;
+
+  @override
+  Widget build(BuildContext context) {
+    final fee = (widget.vehicle['fee'] as num? ?? 0).round();
+    final total = fee * _months;
+    final enough = widget.balance >= total;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Mensalidade · ${widget.vehicle['plate']}',
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Quantos meses?',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            children: [
+              for (final n in const [1, 2, 3, 6, 12])
+                ChoiceChip(
+                  label: Text(n == 1 ? '1 mês' : '$n meses'),
+                  selected: _months == n,
+                  onSelected: (_) => setState(() => _months = n),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Total: ${kz(total)}',
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+          ),
+          Text(
+            'O seu saldo: ${kz(widget.balance)}',
+            style: TextStyle(color: enough ? BazaColors.muted : BazaColors.red),
+          ),
+          const SizedBox(height: 14),
+          AsyncButton(
+            label: enough ? 'Pagar com o saldo' : 'Saldo insuficiente',
+            onPressed: enough
+                ? () async {
+                    final navigator = Navigator.of(context);
+                    await widget.api.post('/driver/subscription/pay', {
+                      'vehicleId': widget.vehicle['id'],
+                      'months': _months,
+                    });
+                    navigator.pop(true);
+                  }
+                : null,
+          ),
+          if (!enough)
+            const Padding(
+              padding: EdgeInsets.only(top: 6),
+              child: Text(
+                'Carregue o saldo primeiro (botão «Carregar saldo»).',
+                style: TextStyle(color: BazaColors.muted, fontSize: 13),
+              ),
+            ),
+        ],
       ),
     );
   }

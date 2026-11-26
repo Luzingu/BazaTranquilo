@@ -4,7 +4,6 @@ import {
   MAX_HELPERS,
   MAX_STOPS,
   SERVICE_KEYS,
-  STOP_FEE,
   config,
   service,
   type RideCategory,
@@ -30,6 +29,8 @@ import { adjustWallet, createPayment } from './payments.js';
 import { authorizeCompanyRide } from './corporate.js';
 import { commissionFor, isNegotiated, monthlyFee } from './settings.js';
 import { sendSms } from './sms.js';
+import { NO_SURGE, combineSurge, fareFor, pricing, type Surge } from './pricing.js';
+import { balanceOf, coversFee, coversFeeFilter, driversFree, freeRidesLeft, noBalanceMessage } from './balance.js';
 import { emitToUser } from './realtime.js';
 
 type Id = Types.ObjectId | string;
@@ -37,11 +38,68 @@ type Id = Types.ObjectId | string;
 const DRIVER_STALE_MS = 3 * 60_000;
 const ON_TRIP: RideStatus[] = ['accepted', 'arrived', 'in_progress'];
 
-export function calcFare(category: RideCategory, route: RouteInfo, helpers = 0, stops = 0) {
-  const t = service(category);
-  const raw = t.base + (route.distanceM / 1000) * t.perKm + (route.durationS / 60) * t.perMin;
-  return Math.max(t.minimum, Math.ceil(raw / 50) * 50) + helpers * HELPER_FEE + stops * STOP_FEE;
+/** Preço pela tarifa (fórmula e tarifas em services/pricing.ts, editáveis no painel). */
+export function calcFare(category: RideCategory, route: RouteInfo, helpers = 0, stops = 0, multiplier = 1) {
+  return fareFor(category, route.distanceM, route.durationS, stops, multiplier, helpers);
 }
+
+/**
+ * Procura à volta de um ponto de recolha: pedidos à procura de motorista feitos
+ * nos últimos minutos e motoristas livres (online, com posição recente, sem corrida).
+ */
+export async function demandAt(point: LatLng) {
+  const s = pricing.surge;
+  const radiusM = s.radiusKm * 1000;
+  // Caixa à volta do ponto (1° de latitude ≈ 111 km), afinada depois pela distância real.
+  const dLat = radiusM / 111_000;
+  const dLng = radiusM / (111_000 * Math.max(0.2, Math.cos((point.lat * Math.PI) / 180)));
+  const [searching, near, busy] = await Promise.all([
+    RideModel.find({
+      status: 'searching',
+      createdAt: { $gte: new Date(Date.now() - s.windowMin * 60_000) },
+      'pickup.lat': { $gte: point.lat - dLat, $lte: point.lat + dLat },
+      'pickup.lng': { $gte: point.lng - dLng, $lte: point.lng + dLng },
+    }).select('pickup'),
+    DriverModel.find({
+      ...availableFilter(),
+      location: { $nearSphere: { $geometry: { type: 'Point', coordinates: [point.lng, point.lat] }, $maxDistance: radiusM } },
+    })
+      .select('_id')
+      .limit(500),
+    busyDriverIds(),
+  ]);
+  const busySet = new Set(busy.map(String));
+  return {
+    searching: searching.filter((r) => haversineM(point, r.pickup) <= radiusM).length,
+    free: near.filter((d) => !busySet.has(d.id as string)).length,
+  };
+}
+
+/** Taxa por procura para um ponto de recolha, neste momento. */
+export async function surgeAt(point: LatLng): Promise<Surge> {
+  const demand = pricing.surge.autoEnabled ? await demandAt(point).catch(() => null) : null;
+  return combineSurge(demand);
+}
+
+// O preço que o passageiro viu na estimativa vale quando confirma o pedido
+// (até 10 min e se a recolha não mudar mais de 1 km): a taxa por procura não
+// pode subir entre o momento em que vê o preço e o momento em que pede.
+const QUOTE_TTL_MS = 10 * 60_000;
+const quotes = new Map<string, { surge: Surge; at: number; point: LatLng }>();
+
+async function surgeForPassenger(passengerId: string | undefined, point: LatLng, fresh = false): Promise<Surge> {
+  const key = passengerId ? String(passengerId) : '';
+  const q = key ? quotes.get(key) : undefined;
+  if (!fresh && q && Date.now() - q.at < QUOTE_TTL_MS && haversineM(q.point, point) <= 1000) return q.surge;
+  const surge = await surgeAt(point);
+  if (key) {
+    quotes.set(key, { surge, at: Date.now(), point });
+    if (quotes.size > 5000) for (const [k, v] of quotes) if (Date.now() - v.at > QUOTE_TTL_MS) quotes.delete(k);
+  }
+  return surge;
+}
+
+const surgeOut = (s: Surge) => (s.multiplier > 1 ? { multiplier: s.multiplier, reason: s.reason, label: s.label } : null);
 
 /** O catálogo de serviços, como o app o mostra. */
 export function catalog() {
@@ -61,8 +119,8 @@ export function catalog() {
   });
 }
 
-export async function estimate(pickup: LatLng, dropoff: LatLng, stops: LatLng[] = []) {
-  const route = await getRoute(pickup, dropoff, stops);
+export async function estimate(pickup: LatLng, dropoff: LatLng, stops: LatLng[] = [], passengerId?: string) {
+  const [route, surge] = await Promise.all([getRoute(pickup, dropoff, stops), surgeForPassenger(passengerId, pickup, true)]);
   return {
     distanceM: route.distanceM,
     durationS: route.durationS,
@@ -70,13 +128,15 @@ export async function estimate(pickup: LatLng, dropoff: LatLng, stops: LatLng[] 
     currency: config.currency,
     helperFee: HELPER_FEE,
     maxHelpers: MAX_HELPERS,
-    stopFee: STOP_FEE,
+    stopFee: pricing.stopFee,
     maxStops: MAX_STOPS,
     /** Regras da negociação de preço, para o app calcular os limites. */
     negotiation: { minFactor: config.minFareFactor, maxFactor: config.maxFareFactor, step: config.fareStep },
     // O preço já inclui as paragens pedidas.
     // Nos serviços de preço combinado não há tarifa: o preço acerta-se com o motorista.
-    options: catalog().map((s) => ({ ...s, fare: s.negotiated ? null : calcFare(s.category, route, 0, stops.length) })),
+    options: catalog().map((s) => ({ ...s, fare: s.negotiated ? null : calcFare(s.category, route, 0, stops.length, surge.multiplier) })),
+    /** Taxa por procura em vigor (já incluída nos preços), para o app a explicar. */
+    surge: surgeOut(surge),
   };
 }
 
@@ -133,6 +193,8 @@ export async function serializeRide(ride: RideDoc, viewer?: Viewer) {
     fare: ride.fare,
     suggestedFare: ride.suggestedFare ?? ride.fare,
     fareBounds: fareBounds(ride.suggestedFare ?? ride.fare, isNegotiated(ride.category)),
+    /** Taxa por procura aplicada ao preço da tarifa (null sem taxa). */
+    surge: (ride.surgeMultiplier ?? 1) > 1 ? { multiplier: ride.surgeMultiplier, label: ride.surgeLabel ?? null } : null,
     /** Preço combinado entre cliente e motorista (sem tarifa calculada). */
     negotiated: isNegotiated(ride.category),
     /** Ainda sem preço: os motoristas têm de propor um. */
@@ -219,11 +281,13 @@ export async function offerRide(ride: RideDoc) {
   if (ride.exclusiveFor) {
     const available = await availableDriverIds([ride.exclusiveFor]);
     const driver = available.size ? await DriverModel.findById(ride.exclusiveFor) : null;
-    drivers = driver ? [driver] : [];
+    drivers = driver && coversFee(driver, ride.commission) ? [driver] : [];
   } else {
     drivers = await DriverModel.find({
       _id: { $nin: [...ride.declinedBy, ...ride.offeredTo, ...(await busyDriverIds())] },
       ...availableFilter(),
+      // Só quem tem saldo para a taxa desta corrida (ou viagens grátis).
+      ...coversFeeFilter(ride.commission),
       'vehicle.serves': ride.category,
       location: {
         $nearSphere: {
@@ -262,7 +326,7 @@ export async function offersForDriver(driver: DriverDoc) {
       .limit(50),
   ]);
   const nearby = open.filter((r) => haversineM(here, r.pickup) <= config.driverSearchRadiusM);
-  const rides = [...direct, ...nearby];
+  const rides = [...direct, ...nearby].filter((r) => coversFee(driver, r.commission));
   if (rides.length) {
     await RideModel.updateMany(
       { _id: { $in: rides.map((r) => r._id) } },
@@ -383,7 +447,9 @@ export async function createRide(
     : await getRoute(input.pickup, dropoff, stops);
   // Preço combinado: sem tarifa. Vale o que o cliente propuser; sem proposta,
   // fica em aberto (0) e são os motoristas a propor.
-  const suggestedFare = negotiated ? 0 : calcFare(input.category, route, helpers, stops.length);
+  // Taxa por procura: a da estimativa que o passageiro acabou de ver.
+  const surge = negotiated ? NO_SURGE : await surgeForPassenger(passenger.id as string, input.pickup);
+  const suggestedFare = negotiated ? 0 : calcFare(input.category, route, helpers, stops.length, surge.multiplier);
   if (offeredFare !== undefined) checkAmount(suggestedFare, offeredFare, negotiated);
   const fare = offeredFare ?? suggestedFare;
   if (input.paymentMethod === 'wallet' && passenger.walletBalance < fare) {
@@ -414,6 +480,7 @@ export async function createRide(
     routeGeometry: route.geometry ?? undefined,
     fare,
     suggestedFare,
+    ...(surge.multiplier > 1 ? { surgeMultiplier: surge.multiplier, surgeLabel: surge.label ?? undefined } : {}),
     searchUntil: new Date(Date.now() + config.searchTimeoutMs),
     commission: commissionFor(input.category, fare),
   });
@@ -431,6 +498,8 @@ export async function acceptRide(driver: DriverDoc, rideId: string) {
   if (await RideModel.exists({ _id: rideId, status: 'searching', fare: 0 })) {
     throw new HttpError(409, 'Este pedido ainda não tem preço: proponha o seu.');
   }
+  const wanted = await RideModel.findById(rideId).select('commission');
+  if (wanted && !coversFee(driver, wanted.commission)) throw new HttpError(402, noBalanceMessage(wanted.commission));
   const ride = await RideModel.findOneAndUpdate(
     {
       _id: rideId,
@@ -507,6 +576,8 @@ export async function placeBid(driver: DriverDoc, rideId: string, amount: number
   if (!current) throw new HttpError(409, 'Esta corrida já não está disponível.');
   checkAmount(current.suggestedFare ?? current.fare, amount, isNegotiated(current.category));
   if (amount === current.fare) throw new HttpError(400, 'Esse é o preço do passageiro: basta aceitar a corrida.');
+  const bidFee = commissionFor(current.category, amount);
+  if (!coversFee(driver, bidFee)) throw new HttpError(402, noBalanceMessage(bidFee));
 
   await RideModel.updateOne(filter, { $pull: { bids: { driver: driver._id } } });
   const extended = new Date(Date.now() + config.bidExtensionMs);
@@ -546,6 +617,13 @@ export async function acceptBid(passenger: PassengerDoc, rideId: string, driverI
   }
   if (current.paymentMethod === 'wallet' && passenger.walletBalance < bid.amount) {
     throw new HttpError(402, 'Saldo insuficiente na carteira para esse preço.');
+  }
+  // O saldo do motorista pode ter baixado desde a proposta.
+  const bidder = await DriverModel.findById(driverId).select('commissionDue freeRidesLeft');
+  if (!bidder || !coversFee(bidder, commissionFor(current.category, bid.amount))) {
+    await RideModel.updateOne({ _id: rideId }, { $pull: { bids: { driver: bid.driver } } });
+    await notifyRide((await RideModel.findById(rideId))!);
+    throw new HttpError(409, 'Esse motorista já não está disponível.');
   }
   const ride = await RideModel.findOneAndUpdate(
     { ...searchingFor(rideId, passenger._id), bids: { $elemMatch: { driver: bid.driver, amount: bid.amount } } },
@@ -634,6 +712,24 @@ const escapeHtml = (v: string) => v.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '
 /** Cobra o passageiro e paga o motorista no fim da corrida. */
 async function settleRide(ride: RideDoc) {
   const driverId = ride.driver!;
+  // Viagem grátis: a corrida não desconta taxa e gasta uma das viagens grátis.
+  if (ride.commission > 0) {
+    const d = await DriverModel.findById(driverId).select('freeRidesLeft commissionDue');
+    const left = d ? freeRidesLeft(d) : 0;
+    if (d && left > 0) {
+      await DriverModel.updateOne({ _id: driverId }, { $set: { freeRidesLeft: left - 1 } });
+      await CommissionEntryModel.create({
+        driver: driverId,
+        type: 'charge',
+        amount: 0,
+        ride: ride._id,
+        note: `Viagem grátis, sem taxa (${left - 1 === 1 ? 'resta 1' : `restam ${left - 1}`})`,
+        dueAfter: d.commissionDue,
+      });
+      ride.commission = 0;
+      ride.freeRide = true;
+    }
+  }
   const net = ride.fare - ride.commission;
 
   if (ride.paymentMethod === 'wallet') {
@@ -697,6 +793,7 @@ async function settleRide(ride: RideDoc) {
         type: 'charge',
         amount: ride.commission,
         ride: ride._id,
+        note: 'Taxa da corrida',
         dueAfter: driver?.commissionDue ?? ride.commission,
       });
     }
@@ -800,8 +897,14 @@ export async function setDriverOnline(driver: DriverDoc, online: boolean, loc?: 
       'Tem comissões por pagar acima do limite. Carregue a carteira para voltar a ficar online.',
     );
   }
-  if (online && config.commission.enforced && driver.commissionDue > config.commission.debtLimit) {
-    throw new HttpError(402, `Tem ${kz(driver.commissionDue)} de comissões por pagar, acima do limite. ${config.commission.payInfo}`);
+  // Saldo pré-pago: quem só faz corridas de tarifa precisa de saldo (ou de
+  // viagens grátis) para ficar online. As viaturas de preço combinado pagam a
+  // mensalidade e não descontam taxa por corrida.
+  if (online && driver.vehicle && !driversFree()) {
+    const onlyTariff = servedCategories(driver.vehicle).every((c) => !isNegotiated(c));
+    if (onlyTariff && freeRidesLeft(driver) <= 0 && balanceOf(driver) <= 0) {
+      throw new HttpError(402, 'Não tem saldo. Carregue o saldo em Menu › O meu saldo para receber pedidos.');
+    }
   }
   if (online) {
     const suspended = suspensionMessage(driver);

@@ -511,8 +511,16 @@ class Estimate {
     this.minFactor = 0.5,
     this.maxFactor = 3,
     this.fareStep = 50,
+    this.surgeMultiplier = 1,
+    this.surgeLabel,
   });
   final int distanceM, durationS;
+
+  /// Taxa por procura em vigor (já incluída nos preços das opções): ×1 sem
+  /// taxa. [surgeLabel] é o motivo ("Procura alta", "Tarifa nocturna").
+  final double surgeMultiplier;
+  final String? surgeLabel;
+  bool get hasSurge => surgeMultiplier > 1;
   final String? geometry;
   final List<FareOption> options;
   final List<String> paymentMethods;
@@ -556,5 +564,9 @@ class Estimate {
     fareStep:
         ((j['negotiation'] as Map<String, dynamic>?)?['step'] as num? ?? 50)
             .round(),
+    surgeMultiplier:
+        ((j['surge'] as Map<String, dynamic>?)?['multiplier'] as num? ?? 1)
+            .toDouble(),
+    surgeLabel: (j['surge'] as Map<String, dynamic>?)?['label'] as String?,
   );
 }

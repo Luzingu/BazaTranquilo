@@ -373,10 +373,10 @@ class _Menu extends StatelessWidget {
                 onTap: () => open(const IntercityScreen()),
               ),
               ListTile(
-                leading: const Icon(Icons.payments_outlined),
-                title: const Text('Pagamentos e mensalidades'),
+                leading: const Icon(Icons.account_balance_wallet_outlined),
+                title: const Text('O meu saldo'),
                 subtitle: const Text(
-                  'Pagar a mensalidade da viatura e as comissões',
+                  'Carregar o saldo, viagens grátis e mensalidades',
                 ),
                 onTap: () => open(const DriverAccountScreen()),
               ),
