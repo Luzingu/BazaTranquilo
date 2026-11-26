@@ -46,6 +46,7 @@ App de táxi para Angola (nome completo "Bazá Tranquilo", lema "Bazá com Segur
 - Segredos só em `backend/.env` e `backend/firebase-chave.json`. Nunca em código, git, registos ou mensagens.
 - O servidor de desenvolvimento envia SMS e e-mails reais: para testar, usar `cd backend && npm run test:e2e` (modo simulado, base de dados própria).
 - Nunca apagar em massa colecções da base `baza`: tem dados reais.
+- ⛔ Mapa (`app/lib/widgets/baza_map.dart`): o `TileLayer` usa `NetworkTileProvider(abortObsoleteRequests: false)`. Com o cancelamento ligado (o padrão do flutter_map 8), no Android o mapa ficava sem imagens depois de saltar para a posição do utilizador (2026-11-26, corrigido pelo Patch 1 do Shorebird na 1.0.0+2). Não voltar a ligar.
 - Sempre que mudar algo que afecte a instalação (variável de ambiente nova, serviço novo, passo de compilação, permissão do app), actualizar `PRODUCAO.md` e o resumo abaixo na mesma alteração.
 
 ## Pôr em produção — resumo dos passos
