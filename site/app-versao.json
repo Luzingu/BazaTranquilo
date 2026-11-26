@@ -1,0 +1,10 @@
+{
+  "_leia": "Versões do app Bazá (lido pelo app em https://bazatranquilo.com/app-versao.json; o nginx serve-o sem cache — não é preciso reiniciar nada). minima: abaixo dela o app BLOQUEIA e manda à loja. actual: abaixo dela mostra um aviso que se fecha. Cada uma pode ser \"X.Y.Z\" (as duas plataformas) ou {\"android\": \"X.Y.Z\", \"ios\": \"X.Y.Z\"}. ⛔ Nunca subir a minima antes de a versão nova estar DISPONÍVEL na loja (a pessoa ficava bloqueada sem nada para instalar). Correcções sem loja: Shorebird (PRODUCAO.md › Actualizações do app).",
+  "minima": "1.0.0",
+  "actual": "1.0.0",
+  "loja": {
+    "android": "https://play.google.com/store/apps/details?id=ao.baza.baza",
+    "ios": ""
+  },
+  "mensagem": "Há uma versão nova do Bazá. Actualize para continuar a viajar com segurança."
+}
