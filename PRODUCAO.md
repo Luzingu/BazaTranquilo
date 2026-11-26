@@ -270,7 +270,7 @@ Por fazer nesta instalação:
   `cd /var/www/BazaTranquilo/backend && npx tsx scripts/desactivar-passageiros-com-numero-de-motorista.ts` e depois o mesmo com `--aplicar`. A 24/11 eram 6 (todos os motoristas). Nada se apaga: o número passa para `formerPhone`, as corridas ficam, e o painel mostra a conta como "Desactivada · número de motorista". Correr de novo não faz mal (salta quem já está tratado e quem estiver numa corrida).
 - Registar o domínio na Google Search Console e enviar o `sitemap.xml`.
 
-- Cópia de segurança da base `baza` (o `/root/backup_mega.sh` só leva as bases do AngoSchool).
+- ✅ 2026-11-26: cópia de segurança diária da base `baza` → Mega (`/backup/baza/AAAA/MM/`), com o mesmo `/root/backup_mega.sh` das bases do AngoSchool, no cron às 03:30. Primeira cópia feita e confirmada no Mega.
 - Conta de SMS e caixa de e-mail próprias (ver secções 4 e 8).
 - ✅ 2026-11-26: servidor TURN (coturn) — testado com `turnutils_uclient` por UDP, TCP e TLS. Testar o TURN: `docker run --rm --network host --entrypoint turnutils_uclient coturn/coturn:4.6 -v -p 3479 -u baza -w <senha> -e 8.8.8.8 -n 1 -m 1 213.136.68.153` (deve dar «Received relay addr» e «success»). Registo: `docker logs baza-turn`.
 - ✅ 2026-11-26: `LEGAL_ENTITY`, `SUPPORT_EMAIL`, `SUPPORT_PHONE` e `COMMISSION_PAY_INFO` com os dados da Luzingu (o Bazá é gerido pela equipa do AngoSchool). Cópia do `.env` anterior: `/root/baza-env-antes-dados-empresa-20261126.bak`.

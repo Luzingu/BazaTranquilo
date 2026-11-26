@@ -15,6 +15,10 @@ declaração e a política não dizem o mesmo.
 
 ## 1. Ficha da loja
 
+⛔ Enquanto não houver postos policiais registados no painel, a ficha **não** promete que a polícia
+acompanha o alerta (a Google rejeita descrições que o app não cumpre). Com os postos registados,
+pode voltar a dizer-se: «os postos policiais mais próximos passam a acompanhar a viagem».
+
 **Nome do app:** Bazá Tranquilo
 
 **Descrição curta** (máx. 80 caracteres):
@@ -28,7 +32,7 @@ declaração e a política não dizem o mesmo.
 > • Saiba o preço antes de confirmar. Nos serviços de carga, combine o preço com o motorista.
 > • Reserve um lugar nas viagens entre municípios.
 > • Fale com o motorista por mensagem ou chamada dentro do app, sem dar o seu número.
-> • Partilhe a viagem com a família e, em caso de perigo, accione o botão SOS: os postos policiais mais próximos passam a acompanhar a viagem.
+> • Partilhe a viagem com a família e, em caso de perigo, use o botão SOS para ligar logo para o 111 e enviar a viagem às pessoas de confiança.
 >
 > PARA O MOTORISTA
 > • Fique online e receba pedidos perto de si.
