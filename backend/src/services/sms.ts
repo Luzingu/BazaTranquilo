@@ -5,7 +5,7 @@ import { HttpError } from '../http.js';
 // sem chave configurada, em desenvolvimento, o SMS é só escrito no log.
 
 /** true quando os SMS são mesmo enviados (e, portanto, custam saldo). */
-export const smsIsReal = () => config.smsProvider === 'telcosms';
+export const smsIsReal = () => config.smsProvider === 'telcosms' || config.smsProvider === 'telcosms_apps';
 
 /**
  * Converte um telefone para o formato da TelcoSMS: 9 dígitos começados por 9.
@@ -41,6 +41,32 @@ function checkQuota(number: string) {
   // Evita que o mapa cresça sem limite.
   if (sentAt.size > 5000) {
     for (const [key, times] of sentAt) if (now - (times.at(-1) ?? 0) > 3_600_000) sentAt.delete(key);
+  }
+}
+
+/**
+ * TelcoSMS, API nova: POST /sms/send com a chave em X-API-Key e o remetente
+ * próprio (SMS_SENDER_ID). Resposta 201 { enviado: true }; com a chave de teste
+ * vem { sandbox: true, enviado: false } (simulação, conta como enviado).
+ */
+async function sendViaTelcoApps(number: string, text: string): Promise<boolean> {
+  let status = 0;
+  try {
+    const res = await fetch(`${config.telcoAppsUrl}/sms/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-API-Key': config.telcoAppsApiKey },
+      body: JSON.stringify({ to: `+244${number}`, senderId: config.smsSenderId, message: text }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    status = res.status;
+    if (!res.ok) return false;
+    const data = (await res.json().catch(() => ({}))) as { enviado?: unknown; sandbox?: unknown };
+    return data.enviado === true || data.sandbox === true || data.enviado === undefined;
+  } catch {
+    return false;
+  } finally {
+    // Só o telefone e o código HTTP: nunca a chave nem o texto (tem o código).
+    console.log(`[SMS] ${number} → HTTP ${status || 'sem resposta'}`);
   }
 }
 
@@ -91,7 +117,8 @@ export async function sendSms(phone: string, text: string) {
   const number = toTelcoNumber(phone);
   if (!number) throw new HttpError(400, 'Só é possível enviar o código para telemóveis angolanos (9 dígitos, começados por 9).');
   checkQuota(number);
-  if (!(await sendViaTelco(number, text))) {
+  const sent = config.smsProvider === 'telcosms_apps' ? await sendViaTelcoApps(number, text) : await sendViaTelco(number, text);
+  if (!sent) {
     // Não conta para o limite um SMS que não saiu.
     sentAt.get(number)?.pop();
     health.lastFailureAt = Date.now();
@@ -137,7 +164,8 @@ export interface SmsBalance {
   planExpired: boolean;
 }
 export async function smsBalance(): Promise<SmsBalance | null> {
-  if (!smsIsReal()) return null;
+  // A API nova ainda não dá o saldo: sem saldo não se conclui nada (não trava envios).
+  if (!smsIsReal() || config.smsProvider === 'telcosms_apps') return null;
   if (balanceCache && Date.now() - balanceCache.at < 5 * 60_000) return balanceCache.value;
   let value: SmsBalance | null = null;
   try {

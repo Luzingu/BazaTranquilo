@@ -110,7 +110,14 @@ export const config = {
    * "console" só escreve o SMS no log (desenvolvimento e testes). Por omissão,
    * envia a sério sempre que houver chave.
    */
-  smsProvider: env.SMS_PROVIDER ?? (env.TELCOSMS_API_KEY ? 'telcosms' : 'console'),
+  smsProvider: env.SMS_PROVIDER ?? (env.TELCOSMS_APPS_API_KEY ? 'telcosms_apps' : env.TELCOSMS_API_KEY ? 'telcosms' : 'console'),
+  /**
+   * TelcoSMS, API nova (apps.telcosms.co.ao, 2026-11-26): conta própria do Bazá
+   * com o remetente "BAZA". A chave "sandbox_…" simula (nada é enviado nem cobrado).
+   */
+  telcoAppsApiKey: env.TELCOSMS_APPS_API_KEY ?? '',
+  telcoAppsUrl: (env.TELCOSMS_APPS_URL ?? 'https://apps.telcosms.co.ao/api/v1').replace(/\/$/, ''),
+  smsSenderId: env.SMS_SENDER_ID ?? 'BAZA',
   telcoSmsApiKey: env.TELCOSMS_API_KEY ?? '',
   /** Só em desenvolvimento, com SMS simulados: números (+244…) cujo primeiro envio falha (testes). */
   smsFailNumbers: (env.SMS_FAIL_NUMBERS ?? '').split(',').map((n) => n.trim()).filter(Boolean),
