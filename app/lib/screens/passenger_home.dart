@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
@@ -13,6 +15,7 @@ import '../widgets/baza_map.dart';
 import '../widgets/common.dart';
 import '../widgets/contact.dart';
 import '../widgets/safety.dart';
+import '../widgets/vehicle_picker.dart';
 import 'favorites_screen.dart';
 import 'intercity_screen.dart';
 import 'negotiated_request_screen.dart';
@@ -217,33 +220,37 @@ class _PassengerHomeState extends State<PassengerHome> {
     );
   }
 
+  /// Cancelar: primeiro «Tem a certeza?» (Cancelar / Aguardar) e depois
+  /// «O que aconteceu?», com os motivos; o motivo é opcional.
   Future<void> _cancel(Ride ride) async {
-    final confirmed = await showDialog<bool>(
-      barrierDismissible: false,
+    final sure = await showModalBottomSheet<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Cancelar a corrida?'),
-        content: ride.driver == null
-            ? null
-            : const Text(
-                'Já há um motorista a caminho. Cancelar mais de 2 minutos depois de ele aceitar, ou com ele já no local, conta como cancelamento tardio: 3 em 24 horas suspendem a conta por algum tempo.',
-              ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Não'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Sim, cancelar'),
-          ),
-        ],
+      isDismissible: false,
+      showDragHandle: true,
+      backgroundColor: Colors.white,
+      builder: (context) => _ConfirmCancelSheet(
+        text: ride.driver == null
+            ? 'Já estamos à procura de carro, não demoramos muito. Se cancelar agora, pode demorar mais a encontrar outro.'
+            : 'Já há um motorista a caminho. Cancelar mais de 2 minutos depois de ele aceitar, ou com ele já no local, conta como cancelamento tardio: 3 em 24 horas suspendem a conta por algum tempo.',
       ),
     );
-    if (confirmed != true || !mounted) return;
+    if (sure != true || !mounted) return;
+    final why = await showModalBottomSheet<({String? reason, String comment})>(
+      context: context,
+      isDismissible: false,
+      showDragHandle: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      builder: (context) => _CancelReasonSheet(withDriver: ride.driver != null),
+    );
+    if (why == null || !mounted) return;
     final rides = context.read<RideState>();
     final res = await context.read<Session>().api.post(
       '/rides/${ride.id}/cancel',
+      {
+        if (why.reason != null) 'reason': why.reason,
+        if (why.comment.trim().isNotEmpty) 'comment': why.comment.trim(),
+      },
     );
     rides.setRide(Ride.fromJson(res['ride'] as Map<String, dynamic>));
   }
@@ -315,6 +322,12 @@ class _PassengerHomeState extends State<PassengerHome> {
               ? rides.driverLocation
               : null,
           bottomPadding: 300,
+          pickupLabel: ride == null && _selected?.etaS != null
+              ? '${(_selected!.etaS! / 60).ceil()} min'
+              : null,
+          dropoffLabel: ride == null && _estimate != null
+              ? 'chegada às ${arrivalClock(_estimate!.durationS, waitS: _selected?.etaS)}'
+              : null,
           fitKey: ride != null
               ? '${ride.id}:${ride.status}'
               : '${pickup?.lat},${pickup?.lng}:${dropoff?.lat},${dropoff?.lng}:${_stops.length}:${_estimate != null}',
@@ -324,7 +337,25 @@ class _PassengerHomeState extends State<PassengerHome> {
         else if (_dropoff == null)
           _wherePanel()
         else
-          _estimatePanel(),
+          // Seta para voltar por cima do painel, sobre o mapa.
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(left: 14, bottom: 12),
+                  child: _RoundMapButton(
+                    icon: Icons.arrow_back,
+                    tooltip: 'Voltar',
+                    onTap: _clearDestination,
+                  ),
+                ),
+                _estimatePanel(),
+              ],
+            ),
+          ),
       ],
     );
   }
@@ -398,80 +429,40 @@ class _PassengerHomeState extends State<PassengerHome> {
   }
 
   // ── Destino escolhido: preço e pedido ─────────────────────────────────────
+  void _clearDestination() => setState(() {
+    _dropoff = null;
+    _stops.clear();
+    _estimate = null;
+    _preferred = null;
+    _offer = null;
+    _estimateError = null;
+  });
+
   Widget _estimatePanel() {
     final estimate = _estimate;
+    final ready = estimate != null && !_estimating;
+    final options = ready
+        ? estimate.options
+              .where((o) => o.group == _group && !o.negotiated)
+              .toList()
+        : const <FareOption>[];
+    final hasCargo =
+        ready && estimate.options.any((o) => o.group == 'cargo' && !o.negotiated);
     return BottomPanel(
+      footer: ready && _selected != null ? _requestBar(estimate) : null,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Column(
-                children: [
-                  _AddressTile(
-                    icon: Icons.trip_origin,
-                    color: BazaColors.green,
-                    text: _pickup?.address ?? 'Escolher ponto de recolha',
-                    dense: true,
-                    onTap: () => _choose(pickup: true),
-                  ),
-                  // Paragens intermédias, entre a recolha e o destino.
-                  for (final (i, stop) in _stops.indexed) ...[
-                    const SizedBox(height: 6),
-                    _AddressTile(
-                      icon: Icons.stop_circle_outlined,
-                      color: const Color(0xFFB45309),
-                      text: stop.address,
-                      dense: true,
-                      onTap: () {},
-                      trailing: IconButton(
-                        tooltip: 'Remover a paragem ${i + 1}',
-                        visualDensity: VisualDensity.compact,
-                        icon: const Icon(Icons.close, size: 20),
-                        onPressed: () => _removeStop(i),
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 6),
-                  _AddressTile(
-                    icon: Icons.flag,
-                    color: BazaColors.red,
-                    text: _dropoff!.address,
-                    dense: true,
-                    onTap: () => _choose(pickup: false),
-                  ),
-                  if (_stops.length < (_estimate?.maxStops ?? 3))
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextButton.icon(
-                        onPressed: _addStop,
-                        icon: const Icon(
-                          Icons.add_location_alt_outlined,
-                          size: 18,
-                        ),
-                        label: Text(
-                          _stops.isEmpty
-                              ? 'Adicionar paragem'
-                              : 'Adicionar outra paragem',
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            IconButton(
-              tooltip: 'Limpar destino',
-              onPressed: () => setState(() {
-                _dropoff = null;
-                _stops.clear();
-                _estimate = null;
-                _preferred = null;
-                _estimateError = null;
-              }),
-              icon: const Icon(Icons.close),
-            ),
-          ],
+        _RouteBox(
+          pickup: _pickup?.address ?? 'Escolher ponto de recolha',
+          dropoff: _dropoff!.address,
+          durationS: ready ? estimate.durationS : null,
+          stops: [for (final s in _stops) s.address],
+          canAddStop: _stops.length < (_estimate?.maxStops ?? 3),
+          onPickup: () => _choose(pickup: true),
+          onDropoff: () => _choose(pickup: false),
+          onAddStop: _addStop,
+          onRemoveStop: _removeStop,
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 12),
         if (_estimating)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 28),
@@ -491,67 +482,44 @@ class _PassengerHomeState extends State<PassengerHome> {
             onPressed: _loadEstimate,
           ),
         ] else ...[
-          Text(
-            '${km(estimate.distanceM)} · cerca de ${minutes(estimate.durationS)}',
-            style: const TextStyle(color: BazaColors.muted),
-          ),
           if (estimate.hasSurge) ...[
-            const SizedBox(height: 10),
             _SurgeNotice(
               label: estimate.surgeLabel ?? 'Procura alta',
               multiplier: estimate.surgeMultiplier,
             ),
+            const SizedBox(height: 10),
           ],
-          const SizedBox(height: 10),
-          if (estimate.options.any((o) => o.group == 'cargo' && !o.negotiated))
-            SegmentedButton<String>(
-              showSelectedIcon: false,
-              segments: const [
-                ButtonSegment(
-                  value: 'ride',
-                  label: Text('Viagem'),
-                  icon: Icon(Icons.hail),
-                ),
-                ButtonSegment(
-                  value: 'cargo',
-                  label: Text('Carga e entregas'),
-                  icon: Icon(Icons.inventory_2_outlined),
-                ),
-              ],
-              selected: {_group},
-              onSelectionChanged: (s) {
+          if (hasCargo) ...[
+            _GroupTabs(
+              value: _group,
+              onChanged: (g) {
                 final first = estimate.options
-                    .where((o) => o.group == s.first && !o.negotiated)
+                    .where((o) => o.group == g && !o.negotiated)
                     .firstOrNull;
-                if (first != null)
-                  _selectCategory(first.category, group: s.first);
+                if (first != null) _selectCategory(first.category, group: g);
               },
             ),
-          const SizedBox(height: 10),
-          // Os serviços de preço combinado pedem-se à parte (ver botão abaixo).
-          for (final o in estimate.options.where(
-            (o) => o.group == _group && !o.negotiated,
-          ))
-            _OptionTile(
-              icon: categoryIcons[o.category] ?? Icons.directions_car,
-              label: o.label,
-              subtitle: o.details,
-              trailing: kz(o.fare),
-              selected: o.category == _category,
-              onTap: () => _selectCategory(o.category),
-            ),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: _requestNegotiated,
-              icon: const Icon(Icons.local_shipping_outlined, size: 18),
-              label: const Text(
-                'Triciclo, XL, carrinha ou camião: preço a combinar',
+            const SizedBox(height: 8),
+          ],
+          VehicleCarousel(
+            options: options,
+            selected: _category,
+            onSelect: _selectCategory,
+            // Os serviços de preço combinado pedem-se à parte.
+            onNegotiated: _requestNegotiated,
+          ),
+          if (_selected != null && _selected!.details.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 6, left: 4),
+              child: Text(
+                _selected!.details,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: BazaColors.muted, fontSize: 13),
               ),
             ),
-          ),
           if (_group == 'cargo') ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: 10),
             TextField(
               controller: _cargoNote,
               maxLength: 200,
@@ -562,108 +530,193 @@ class _PassengerHomeState extends State<PassengerHome> {
                 counterText: '',
               ),
             ),
-            if (_selected?.helpers ?? false)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Ajudantes para carregar',
-                            style: TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          Text(
-                            '${kz(estimate.helperFee)} cada',
-                            style: const TextStyle(
-                              color: BazaColors.muted,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: 'Menos um ajudante',
-                      onPressed: _helpers > 0
-                          ? () => setState(() {
-                              _helpers--;
-                              _offer = null;
-                            })
-                          : null,
-                      icon: const Icon(Icons.remove_circle_outline),
-                    ),
-                    Text(
-                      '$_helpers',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: 'Mais um ajudante',
-                      onPressed: _helpers < estimate.maxHelpers
-                          ? () => setState(() {
-                              _helpers++;
-                              _offer = null;
-                            })
-                          : null,
-                      icon: const Icon(Icons.add_circle_outline),
-                    ),
-                  ],
-                ),
-              ),
-            const SizedBox(height: 8),
+            if (_selected?.helpers ?? false) _helpersRow(estimate),
           ],
-          const SizedBox(height: 6),
-          _OptionTile(
-            icon: paymentIcons[_payment] ?? Icons.payments_outlined,
-            label: paymentLabels[_payment] ?? _payment,
-            trailing: 'Alterar',
-            compact: true,
-            onTap: () => _pickPayment(estimate),
-          ),
-          _OptionTile(
-            icon: _preferred == null ? Icons.favorite_border : Icons.favorite,
-            label: _preferred == null
-                ? 'Qualquer motorista'
-                : _preferred!.driver.name,
-            trailing: _preferred == null ? 'Preferidos' : 'Alterar',
-            compact: true,
-            onTap: _pickDriver,
-          ),
-          if (_selected != null) ...[
-            const SizedBox(height: 6),
-            // O passageiro pode propor outro preço; os motoristas aceitam ou respondem.
-            PriceStepper(
-              value: _price,
-              min: estimate.minFare(_suggestedTotal),
-              max: estimate.maxFare(_suggestedTotal),
-              reference: _suggestedTotal,
-              onChanged: (v) =>
-                  setState(() => _offer = v == _suggestedTotal ? null : v),
-            ),
-            const Padding(
-              padding: EdgeInsets.only(top: 6),
-              child: Text(
-                'Pode propor o seu preço. Os motoristas aceitam ou respondem com o deles.',
-                style: TextStyle(color: BazaColors.muted, fontSize: 13),
-              ),
+          // O que mudou nas «Mais opções», à vista e fácil de desfazer.
+          if (_offer != null || _preferred != null) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (_offer != null)
+                  InputChip(
+                    avatar: const Icon(Icons.sell_outlined, size: 18),
+                    label: Text('O seu preço: ${kz(_price)}'),
+                    onPressed: () => _openOptions(estimate),
+                    onDeleted: () => setState(() => _offer = null),
+                    deleteButtonTooltipMessage: 'Voltar ao preço da tarifa',
+                  ),
+                if (_preferred != null)
+                  InputChip(
+                    avatar: const Icon(Icons.favorite, size: 18, color: BazaColors.red),
+                    label: Text('Chamar ${_preferred!.driver.name.split(' ').first}'),
+                    onPressed: _pickDriver,
+                    onDeleted: () => setState(() => _preferred = null),
+                    deleteButtonTooltipMessage: 'Qualquer motorista',
+                  ),
+              ],
             ),
           ],
-          const SizedBox(height: 14),
-          AsyncButton(
-            label: _selected == null
-                ? 'Pedir'
-                : '${_preferred != null ? 'Chamar ${_preferred!.driver.name.split(' ').first}' : 'Pedir ${_selected!.label}'}'
-                      ' · ${kz(_price)}',
-            onPressed: _selected == null ? null : _request,
-          ),
         ],
       ],
     );
+  }
+
+  /// Barra fixa: forma de pagamento · Pedir · mais opções.
+  Widget _requestBar(Estimate estimate) {
+    final busyOptions = _offer != null || _preferred != null;
+    return Row(
+      children: [
+        _SquareButton(
+          tooltip: 'Forma de pagamento: ${paymentLabels[_payment] ?? _payment}',
+          onTap: () => _pickPayment(estimate),
+          child: Icon(
+            paymentIcons[_payment] ?? Icons.payments_outlined,
+            color: _payment == 'cash' ? BazaColors.green : BazaColors.ink,
+            size: 28,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: AsyncButton(
+            label: [
+              _preferred != null
+                  ? 'Chamar ${_preferred!.driver.name.split(' ').first}'
+                  : 'Pedir',
+              if (_offer != null) kz(_price),
+            ].join(' · '),
+            onPressed: _request,
+          ),
+        ),
+        const SizedBox(width: 10),
+        _SquareButton(
+          tooltip: 'Mais opções: propor preço, motorista preferido',
+          onTap: () => _openOptions(estimate),
+          dot: busyOptions,
+          child: const Icon(Icons.tune, size: 26),
+        ),
+      ],
+    );
+  }
+
+  Widget _helpersRow(Estimate estimate) => Padding(
+    padding: const EdgeInsets.only(top: 8),
+    child: Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Ajudantes para carregar',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              Text(
+                '${kz(estimate.helperFee)} cada',
+                style: const TextStyle(color: BazaColors.muted, fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+        IconButton(
+          tooltip: 'Menos um ajudante',
+          onPressed: _helpers > 0
+              ? () => setState(() {
+                  _helpers--;
+                  _offer = null;
+                })
+              : null,
+          icon: const Icon(Icons.remove_circle_outline),
+        ),
+        Text(
+          '$_helpers',
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+        ),
+        IconButton(
+          tooltip: 'Mais um ajudante',
+          onPressed: _helpers < estimate.maxHelpers
+              ? () => setState(() {
+                  _helpers++;
+                  _offer = null;
+                })
+              : null,
+          icon: const Icon(Icons.add_circle_outline),
+        ),
+      ],
+    ),
+  );
+
+  /// «Mais opções»: motorista preferido e propor outro preço.
+  Future<void> _openOptions(Estimate estimate) async {
+    final pickDriver = await showModalBottomSheet<bool>(
+      context: context,
+      isDismissible: false,
+      showDragHandle: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheet) {
+          void update(VoidCallback f) {
+            setState(f);
+            setSheet(() {});
+          }
+
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'Mais opções',
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 14),
+                  _OptionTile(
+                    icon: _preferred == null ? Icons.favorite_border : Icons.favorite,
+                    label: _preferred == null
+                        ? 'Qualquer motorista'
+                        : _preferred!.driver.name,
+                    trailing: _preferred == null ? 'Preferidos' : 'Alterar',
+                    compact: true,
+                    onTap: () => Navigator.pop(context, true),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Propor o meu preço',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                  ),
+                  const SizedBox(height: 8),
+                  PriceStepper(
+                    value: _price,
+                    min: estimate.minFare(_suggestedTotal),
+                    max: estimate.maxFare(_suggestedTotal),
+                    reference: _suggestedTotal,
+                    onChanged: (v) =>
+                        update(() => _offer = v == _suggestedTotal ? null : v),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.only(top: 6),
+                    child: Text(
+                      'Os motoristas aceitam o seu preço ou respondem com o deles.',
+                      style: TextStyle(color: BazaColors.muted, fontSize: 13),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('Feito'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    if (pickDriver == true && mounted) await _pickDriver();
   }
 
   Future<void> _pickPayment(Estimate estimate) async {
@@ -763,31 +816,48 @@ class _PassengerHomeState extends State<PassengerHome> {
 
     switch (ride.status) {
       case 'searching':
+        final near = _estimate?.nearbyDrivers ?? 0;
         return BottomPanel(
           children: [
-            PanelTitle(
-              ride.exclusive
-                  ? 'A chamar ${ride.preferredDriverName ?? 'o seu motorista'}…'
-                  : 'À procura de motorista…',
-              subtitle: ride.exclusive
-                  ? 'Se não responder em 30 segundos, procuramos outros motoristas.'
-                  : ride.preferredDriverName != null
-                  ? '${ride.preferredDriverName} não respondeu. A procurar outros motoristas…'
-                  : ride.negotiated
-                  ? 'Os motoristas estão a ver o seu pedido e a enviar propostas.'
-                  : 'Isto costuma demorar menos de um minuto.',
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: PanelTitle(
+                    ride.exclusive
+                        ? 'A chamar ${ride.preferredDriverName ?? 'o seu motorista'}…'
+                        : near > 5
+                        ? 'Mais de 5 motoristas perto'
+                        : near > 1
+                        ? '$near motoristas perto'
+                        : 'À procura de motorista…',
+                    subtitle: ride.exclusive
+                        ? 'Se não responder em 30 segundos, procuramos outros motoristas.'
+                        : ride.preferredDriverName != null
+                        ? '${ride.preferredDriverName} não respondeu. A procurar outros motoristas…'
+                        : ride.negotiated
+                        ? 'Os motoristas estão a ver o seu pedido e a enviar propostas.'
+                        : near > 1
+                        ? 'A escolher um para a sua viagem.'
+                        : 'Isto costuma demorar menos de um minuto.',
+                  ),
+                ),
+                const SizedBox(width: 10),
+                _Elapsed(since: ride.createdAt),
+              ],
             ),
             const LinearProgressIndicator(
               color: BazaColors.yellow,
               backgroundColor: BazaColors.surface,
               minHeight: 5,
             ),
-            const SizedBox(height: 16),
-            summary,
+            const SizedBox(height: 14),
+            _TripCard(ride: ride),
+            if (ride.isCargo) CargoLine(ride: ride),
             const SizedBox(height: 14),
             _Negotiation(key: ValueKey(ride.id), ride: ride),
-            const SizedBox(height: 16),
-            cancelButton(),
+            const SizedBox(height: 10),
+            _CancelRow(onTap: () => _cancel(ride)),
           ],
         );
       case 'accepted' || 'arrived':
@@ -795,7 +865,11 @@ class _PassengerHomeState extends State<PassengerHome> {
         return BottomPanel(
           children: [
             PanelTitle(
-              arrived ? 'O motorista chegou' : 'Motorista a caminho',
+              driver == null
+                  ? (arrived ? 'O motorista chegou' : 'Motorista a caminho')
+                  : arrived
+                  ? '${driver.name.split(' ').first} chegou'
+                  : '${driver.name.split(' ').first} está a caminho',
               subtitle: arrived
                   ? 'Encontre-o em ${ride.pickup.address}.'
                   : '${_eta('Chega em')}Confirme a matrícula antes de entrar.',
@@ -970,66 +1044,36 @@ class _OptionTile extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.trailing,
-    this.subtitle,
     required this.onTap,
-    this.selected = false,
     this.compact = false,
   });
   final IconData icon;
   final String label, trailing;
-  final String? subtitle;
   final VoidCallback onTap;
-  final bool selected;
   final bool compact;
 
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(bottom: 8),
     child: Material(
-      color: selected
-          ? BazaColors.yellow.withValues(alpha: 0.18)
-          : Colors.white,
+      color: Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: BorderSide(
-          color: selected ? BazaColors.ink : const Color(0xFFE5E7EB),
-          width: selected ? 1.8 : 1,
-        ),
+        side: const BorderSide(color: Color(0xFFE5E7EB)),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
         onTap: onTap,
         child: Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: 14,
-            vertical: compact || subtitle != null ? 10 : 14,
-          ),
+          padding: EdgeInsets.symmetric(horizontal: 14, vertical: compact ? 10 : 14),
           child: Row(
             children: [
               Icon(icon, size: compact ? 22 : 28),
               const SizedBox(width: 12),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      label,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    if (subtitle != null)
-                      Text(
-                        subtitle!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: BazaColors.muted,
-                          fontSize: 13,
-                        ),
-                      ),
-                  ],
+                child: Text(
+                  label,
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
               ),
               const SizedBox(width: 8),
@@ -1451,4 +1495,656 @@ class _SurgeNotice extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Botão redondo e branco sobre o mapa (a seta para voltar).
+class _RoundMapButton extends StatelessWidget {
+  const _RoundMapButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+    message: tooltip,
+    child: Material(
+      color: Colors.white,
+      shape: const CircleBorder(),
+      elevation: 4,
+      shadowColor: Colors.black38,
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: SizedBox.square(
+          dimension: 52,
+          child: Icon(icon, color: BazaColors.ink, size: 26),
+        ),
+      ),
+    ),
+  );
+}
+
+/// Botão quadrado ao lado do «Pedir» (pagamento, mais opções); [dot] marca
+/// que há uma opção escolhida.
+class _SquareButton extends StatelessWidget {
+  const _SquareButton({
+    required this.tooltip,
+    required this.onTap,
+    required this.child,
+    this.dot = false,
+  });
+  final String tooltip;
+  final VoidCallback onTap;
+  final Widget child;
+  final bool dot;
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+    message: tooltip,
+    child: Material(
+      color: BazaColors.surface,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: SizedBox.square(
+          dimension: 54,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              child,
+              if (dot)
+                Positioned(
+                  top: 10,
+                  right: 10,
+                  child: Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: BazaColors.red,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 1.5),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/// Recolha, paragens e destino em linhas finas, como uma lista: o destino
+/// leva a duração da viagem e o botão «Paragens».
+class _RouteBox extends StatelessWidget {
+  const _RouteBox({
+    required this.pickup,
+    required this.dropoff,
+    required this.stops,
+    required this.canAddStop,
+    required this.onPickup,
+    required this.onDropoff,
+    required this.onAddStop,
+    required this.onRemoveStop,
+    this.durationS,
+  });
+  final String pickup, dropoff;
+  final List<String> stops;
+  final bool canAddStop;
+  final int? durationS;
+  final VoidCallback onPickup, onDropoff, onAddStop;
+  final ValueChanged<int> onRemoveStop;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget row({
+      required IconData icon,
+      required Color color,
+      required Widget text,
+      required VoidCallback onTap,
+      Widget? trailing,
+      bool divider = true,
+    }) => InkWell(
+      onTap: onTap,
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 54),
+        child: Row(
+          children: [
+            SizedBox(width: 34, child: Icon(icon, color: color, size: 24)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Container(
+                constraints: const BoxConstraints(minHeight: 54),
+                alignment: Alignment.centerLeft,
+                decoration: BoxDecoration(
+                  border: divider
+                      ? const Border(
+                          bottom: BorderSide(color: Color(0xFFE8E9EC)),
+                        )
+                      : null,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(child: text),
+                    ?trailing,
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    return Column(
+      children: [
+        row(
+          icon: Icons.hail,
+          color: BazaColors.green,
+          text: Text(
+            pickup,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w500),
+          ),
+          onTap: onPickup,
+        ),
+        for (final (i, stop) in stops.indexed)
+          row(
+            icon: Icons.stop_circle_outlined,
+            color: const Color(0xFFB45309),
+            text: Text(
+              stop,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 15),
+            ),
+            onTap: () {},
+            trailing: IconButton(
+              tooltip: 'Remover a paragem ${i + 1}',
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.close, size: 20),
+              onPressed: () => onRemoveStop(i),
+            ),
+          ),
+        row(
+          icon: Icons.sports_score,
+          color: BazaColors.ink,
+          divider: false,
+          onTap: onDropoff,
+          text: Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(text: dropoff),
+                if (durationS != null)
+                  TextSpan(
+                    text: ' · ${minutes(durationS!)}',
+                    style: const TextStyle(color: BazaColors.muted),
+                  ),
+              ],
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w500),
+          ),
+          trailing: canAddStop
+              ? Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: ActionChip(
+                    label: const Text('Paragens'),
+                    avatar: const Icon(Icons.add, size: 18),
+                    tooltip: 'Adicionar paragem',
+                    backgroundColor: BazaColors.surface,
+                    side: BorderSide.none,
+                    shape: const StadiumBorder(),
+                    onPressed: onAddStop,
+                  ),
+                )
+              : null,
+        ),
+      ],
+    );
+  }
+}
+
+/// Separadores «Viagens» / «Entregas e carga» (pílula cinzenta no escolhido).
+class _GroupTabs extends StatelessWidget {
+  const _GroupTabs({required this.value, required this.onChanged});
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget tab(String key, String label, IconData icon) {
+      final on = key == value;
+      return Padding(
+        padding: const EdgeInsets.only(right: 6),
+        child: Material(
+          color: on ? BazaColors.surface : Colors.transparent,
+          borderRadius: BorderRadius.circular(14),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () => onChanged(key),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 18, color: on ? BazaColors.ink : BazaColors.muted),
+                  const SizedBox(width: 6),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: on ? FontWeight.w700 : FontWeight.w500,
+                      color: on ? BazaColors.ink : BazaColors.muted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        tab('ride', 'Viagens', Icons.hail),
+        tab('cargo', 'Entregas e carga', Icons.inventory_2_outlined),
+      ],
+    );
+  }
+}
+
+/// Tempo desde o pedido, «00:14», a contar ao segundo.
+class _Elapsed extends StatefulWidget {
+  const _Elapsed({required this.since});
+  final DateTime since;
+
+  @override
+  State<_Elapsed> createState() => _ElapsedState();
+}
+
+class _ElapsedState extends State<_Elapsed> {
+  late final Timer _timer = Timer.periodic(
+    const Duration(seconds: 1),
+    (_) => setState(() {}),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _timer; // arranca o relógio
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final d = DateTime.now().difference(widget.since);
+    final s = d.isNegative ? 0 : d.inSeconds;
+    String two(int n) => n.toString().padLeft(2, '0');
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Text(
+        '${two(s ~/ 60)}:${two(s % 60)}',
+        style: const TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.w700,
+          fontFeatures: [FontFeature.tabularFigures()],
+        ),
+      ),
+    );
+  }
+}
+
+/// Recolha, paragens e destino da corrida pedida, num cartão cinzento.
+class _TripCard extends StatelessWidget {
+  const _TripCard({required this.ride});
+  final Ride ride;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget line(Widget lead, String title, String value, {bool last = false}) =>
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            children: [
+              SizedBox(width: 44, child: Center(child: lead)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 11),
+                  decoration: BoxDecoration(
+                    border: last
+                        ? null
+                        : const Border(
+                            bottom: BorderSide(color: Color(0xFFE2E4E8)),
+                          ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          color: BazaColors.muted,
+                          fontSize: 13,
+                        ),
+                      ),
+                      Text(
+                        value,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 16.5),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+    final noDest = ride.noDestination;
+    return Container(
+      decoration: BoxDecoration(
+        color: BazaColors.surface,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        children: [
+          line(
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: BazaColors.green,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.hail, color: Colors.white),
+            ),
+            'Recolha',
+            ride.pickup.address,
+            last: noDest && ride.stops.isEmpty,
+          ),
+          for (final (i, s) in ride.stops.indexed)
+            line(
+              const Icon(Icons.stop_circle_outlined, color: Color(0xFFB45309)),
+              'Paragem ${i + 1}',
+              s.address,
+              last: noDest && i == ride.stops.length - 1,
+            ),
+          if (!noDest)
+            line(
+              const Icon(Icons.sports_score, size: 26),
+              'Destino',
+              ride.dropoff.address,
+              last: true,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// «Cancelar viagem», em vermelho, numa linha.
+class _CancelRow extends StatelessWidget {
+  const _CancelRow({required this.onTap});
+  final Future<void> Function() onTap;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+    borderRadius: BorderRadius.circular(12),
+    onTap: () async {
+      try {
+        await onTap();
+      } catch (e) {
+        if (context.mounted) showError(context, e);
+      }
+    },
+    child: const Padding(
+      padding: EdgeInsets.symmetric(vertical: 14, horizontal: 4),
+      child: Row(
+        children: [
+          Icon(Icons.cancel_outlined, color: BazaColors.red, size: 26),
+          SizedBox(width: 14),
+          Expanded(
+            child: Text(
+              'Cancelar viagem',
+              style: TextStyle(
+                color: BazaColors.red,
+                fontSize: 17,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          Icon(Icons.chevron_right, color: BazaColors.red),
+        ],
+      ),
+    ),
+  );
+}
+
+/// «Tem a certeza de que quer cancelar?» — Cancelar / Aguardar.
+class _ConfirmCancelSheet extends StatelessWidget {
+  const _ConfirmCancelSheet({required this.text});
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Tem a certeza de que quer cancelar?',
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, height: 1.15),
+          ),
+          const SizedBox(height: 10),
+          Text(text, style: const TextStyle(fontSize: 16, height: 1.35)),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: BazaColors.surface,
+                    foregroundColor: BazaColors.ink,
+                  ),
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Cancelar'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton(
+                  autofocus: true,
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Aguardar'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+/// «O que aconteceu?»: o motivo do cancelamento (opcional) e um comentário.
+class _CancelReasonSheet extends StatefulWidget {
+  const _CancelReasonSheet({required this.withDriver});
+
+  /// Já havia motorista: mostra também os motivos sobre ele.
+  final bool withDriver;
+
+  @override
+  State<_CancelReasonSheet> createState() => _CancelReasonSheetState();
+}
+
+class _CancelReasonSheetState extends State<_CancelReasonSheet> {
+  String? _reason;
+  final _comment = TextEditingController();
+
+  static const _mine = [
+    ('other_ride', 'Encontrei outra viagem', Icons.directions_car_outlined),
+    ('changed_plans', 'Mudança de planos', Icons.directions_walk),
+    ('wrong_address', 'Morada errada', Icons.wrong_location_outlined),
+  ];
+  static const _driver = [
+    ('driver_asked', 'Pediu para cancelar', Icons.person_off_outlined),
+    ('driver_rude', 'Comportamento rude', Icons.sentiment_very_dissatisfied_outlined),
+    ('driver_not_coming', 'Não veio até mim', Icons.wrong_location),
+    ('driver_more_money', 'Pediu mais dinheiro', Icons.payments_outlined),
+    ('driver_refused', 'Recusou-se a conduzir', Icons.front_hand_outlined),
+    ('driver_unreachable', 'Não respondia', Icons.phone_disabled_outlined),
+    ('other_passenger', 'Outro passageiro no carro', Icons.airline_seat_recline_normal),
+  ];
+  static const _service = [
+    ('pickup_slow', 'A recolha demorou demasiado', Icons.schedule),
+    ('driver_rating', 'Avaliação do motorista', Icons.star_outline),
+    ('price', 'Preço da viagem', Icons.sell_outlined),
+  ];
+
+  @override
+  void dispose() {
+    _comment.dispose();
+    super.dispose();
+  }
+
+  void _done() =>
+      Navigator.pop(context, (reason: _reason, comment: _comment.text));
+
+  Widget _group(String title, List<(String, String, IconData)> items) =>
+      Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(color: BazaColors.muted, fontSize: 14.5),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final (key, label, icon) in items)
+                  ChoiceChip(
+                    avatar: Icon(
+                      icon,
+                      size: 20,
+                      color: _reason == key ? Colors.white : BazaColors.ink,
+                    ),
+                    label: Text(label),
+                    labelStyle: TextStyle(
+                      fontSize: 15,
+                      color: _reason == key ? Colors.white : BazaColors.ink,
+                    ),
+                    showCheckmark: false,
+                    selected: _reason == key,
+                    selectedColor: BazaColors.ink,
+                    backgroundColor: BazaColors.surface,
+                    side: BorderSide.none,
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    onSelected: (on) => setState(() => _reason = on ? key : null),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    child: ConstrainedBox(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.88,
+      ),
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'O que aconteceu?',
+                            style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Não cancelar',
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.close),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    _group('Iniciativa minha', _mine),
+                    if (widget.withDriver) _group('Acções do motorista', _driver),
+                    _group(
+                      'Problemas do serviço',
+                      widget.withDriver
+                          ? _service
+                          : _service.where((r) => r.$1 != 'driver_rating').toList(),
+                    ),
+                    TextField(
+                      controller: _comment,
+                      maxLength: 300,
+                      maxLines: 2,
+                      minLines: 1,
+                      textCapitalization: TextCapitalization.sentences,
+                      onSubmitted: (_) => _done(),
+                      decoration: const InputDecoration(
+                        hintText: 'Os seus comentários (opcional)',
+                        counterText: '',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+              child: FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: BazaColors.red,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: _done,
+                child: const Text('Cancelar a viagem'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }

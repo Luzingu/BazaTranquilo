@@ -119,8 +119,47 @@ export function catalog() {
   });
 }
 
+/**
+ * Motoristas livres perto da recolha e, por tipo de serviço, em quanto tempo
+ * chega o mais próximo (estimativa pela distância em linha recta, para a lista
+ * de viaturas do passageiro mostrar «3 min»). Nunca devolve posições.
+ */
+export async function supplyNear(point: LatLng) {
+  const [near, busy] = await Promise.all([
+    DriverModel.find({
+      ...availableFilter(),
+      location: {
+        $nearSphere: {
+          $geometry: { type: 'Point', coordinates: [point.lng, point.lat] },
+          $maxDistance: config.driverSearchRadiusM,
+        },
+      },
+    })
+      .select('location vehicle.serves')
+      .limit(60),
+    busyDriverIds(),
+  ]);
+  const busySet = new Set(busy.map(String));
+  const free = near.filter((d) => !busySet.has(d.id as string));
+  const etaS: Partial<Record<RideCategory, number>> = {};
+  for (const d of free) {
+    const c = d.location?.coordinates;
+    if (!c) continue;
+    // Ruas não são linhas rectas (×1,4) e a cidade anda devagar (~22 km/h); mais 1 min para arrancar.
+    const s = Math.round((haversineM(point, { lat: c[1], lng: c[0] }) * 1.4) / (22_000 / 3600)) + 60;
+    for (const cat of (d.vehicle?.serves ?? []) as RideCategory[]) {
+      if (etaS[cat] === undefined || s < etaS[cat]!) etaS[cat] = s;
+    }
+  }
+  return { nearbyDrivers: free.length, etaS };
+}
+
 export async function estimate(pickup: LatLng, dropoff: LatLng, stops: LatLng[] = [], passengerId?: string) {
-  const [route, surge] = await Promise.all([getRoute(pickup, dropoff, stops), surgeForPassenger(passengerId, pickup, true)]);
+  const [route, surge, supply] = await Promise.all([
+    getRoute(pickup, dropoff, stops),
+    surgeForPassenger(passengerId, pickup, true),
+    supplyNear(pickup).catch(() => ({ nearbyDrivers: 0, etaS: {} as Partial<Record<RideCategory, number>> })),
+  ]);
   return {
     distanceM: route.distanceM,
     durationS: route.durationS,
@@ -134,7 +173,14 @@ export async function estimate(pickup: LatLng, dropoff: LatLng, stops: LatLng[] 
     negotiation: { minFactor: config.minFareFactor, maxFactor: config.maxFareFactor, step: config.fareStep },
     // O preço já inclui as paragens pedidas.
     // Nos serviços de preço combinado não há tarifa: o preço acerta-se com o motorista.
-    options: catalog().map((s) => ({ ...s, fare: s.negotiated ? null : calcFare(s.category, route, 0, stops.length, surge.multiplier) })),
+    options: catalog().map((s) => ({
+      ...s,
+      fare: s.negotiated ? null : calcFare(s.category, route, 0, stops.length, surge.multiplier),
+      /** Segundos até chegar o motorista livre mais próximo deste serviço (null = nenhum perto). */
+      etaS: supply.etaS[s.category] ?? null,
+    })),
+    /** Motoristas livres perto da recolha (todos os serviços). */
+    nearbyDrivers: supply.nearbyDrivers,
     /** Taxa por procura em vigor (já incluída nos preços), para o app a explicar. */
     surge: surgeOut(surge),
   };
@@ -804,7 +850,19 @@ async function settleRide(ride: RideDoc) {
   await ride.save();
 }
 
-export async function cancelRide(role: Role, userId: string, rideId: string) {
+/** Motivos de cancelamento que o app oferece (o resto vai no comentário). */
+export const CANCEL_REASONS = [
+  'other_ride', 'changed_plans', 'wrong_address',
+  'driver_asked', 'driver_rude', 'driver_not_coming', 'driver_more_money', 'driver_refused', 'driver_unreachable', 'other_passenger',
+  'pickup_slow', 'driver_rating', 'price',
+] as const;
+
+export async function cancelRide(
+  role: Role,
+  userId: string,
+  rideId: string,
+  why: { reason?: (typeof CANCEL_REASONS)[number]; comment?: string } = {},
+) {
   const mine = role === 'passenger' ? { passenger: userId } : { driver: userId };
   const allowed: RideStatus[] =
     role === 'passenger' ? ['searching', 'accepted', 'arrived'] : ['accepted', 'arrived'];
@@ -821,7 +879,12 @@ export async function cancelRide(role: Role, userId: string, rideId: string) {
         (before?.status === 'accepted' && Date.now() - (before.acceptedAt?.getTime() ?? Date.now()) > config.cancellation.graceMs);
   const updated = await RideModel.findOneAndUpdate(
     { _id: rideId, ...mine, status: { $in: allowed } },
-    { status: 'cancelled', cancelledBy: role, cancelledAt: new Date(), lateCancel: late, bids: [], $unset: { exclusiveFor: 1 } },
+    {
+      status: 'cancelled', cancelledBy: role, cancelledAt: new Date(), lateCancel: late, bids: [],
+      ...(why.reason ? { cancelReason: why.reason } : {}),
+      ...(why.comment?.trim() ? { cancelComment: why.comment.trim() } : {}),
+      $unset: { exclusiveFor: 1 },
+    },
     { returnDocument: 'after' },
   );
   if (!updated) throw new HttpError(409, 'Esta corrida já não pode ser cancelada.');

@@ -18,6 +18,12 @@ export const settings = {
    * baixo), entra-se e cria-se conta só com o número de telefone e a senha.
    */
   otpEnabled: true,
+  /**
+   * Código SMS para confirmar o número ao criar conta. Desligado, a conta
+   * cria-se só com a senha e fica com o número por confirmar (como quando o
+   * SMS falha); o app não volta a pedir o código enquanto estiver desligado.
+   */
+  signupSmsEnabled: true,
   /** Parte do valor de cada passageiro de uma viagem intermunicipal que fica para o Bazá. */
   intercityCommissionRate: 0.1,
   /** Viagens sem taxa para cada motorista novo (fixadas na conta quando é criada). */
@@ -43,6 +49,8 @@ export async function loadSettings() {
   }
   const otp = await SettingModel.findOne({ key: 'otpEnabled' });
   if (typeof otp?.value === 'boolean') settings.otpEnabled = otp.value;
+  const signupSms = await SettingModel.findOne({ key: 'signupSmsEnabled' });
+  if (typeof signupSms?.value === 'boolean') settings.signupSmsEnabled = signupSms.value;
   const inter = await SettingModel.findOne({ key: 'intercityCommissionRate' });
   if (typeof inter?.value === 'number' && inter.value >= 0 && inter.value <= MAX_COMMISSION_RATE) {
     settings.intercityCommissionRate = inter.value;
@@ -78,6 +86,11 @@ export async function setFreeRides(count: number, by: string) {
 export async function setOtpEnabled(enabled: boolean, by: string) {
   await SettingModel.updateOne({ key: 'otpEnabled' }, { value: enabled, by }, { upsert: true });
   settings.otpEnabled = enabled;
+}
+
+export async function setSignupSmsEnabled(enabled: boolean, by: string) {
+  await SettingModel.updateOne({ key: 'signupSmsEnabled' }, { value: enabled, by }, { upsert: true });
+  settings.signupSmsEnabled = enabled;
 }
 
 /** Muda a comissão das corridas pedidas a partir de agora (as já pedidas mantêm a que tinham). */

@@ -25,5 +25,5 @@ cp "$RAIZ/app/android/key.properties" "$DEST/app/android/key.properties"
 cp "$RAIZ/app/android/app/baza-upload.jks" "$DEST/app/android/app/baza-upload.jks"
 cd "$DEST/app"
 # os MESMOS dart-define da versão publicada (o Shorebird recusa valores diferentes)
-shorebird patch android --release-version="$VERSAO" --track stable --rollout "$PERC" --dart-define=API_URL="$API" --dart-define=APP_VERSAO="$NOME"
+shorebird patch android --release-version="$VERSAO" --track stable --rollout "$PERC" --dart-define=API_URL="$API" --dart-define=APP_VERSAO="$NOME" --no-tree-shake-icons
 echo "Correcção publicada. Ver e controlar: https://console.shorebird.dev"

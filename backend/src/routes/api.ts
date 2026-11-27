@@ -36,6 +36,7 @@ import {
   advanceRide,
   availableDriverIds,
   cancelRide,
+  CANCEL_REASONS,
   catalog,
   changePrice,
   createRide,
@@ -321,7 +322,11 @@ ridesRouter.get('/:id', async (req, res) => {
 });
 
 ridesRouter.post('/:id/cancel', async (req, res) => {
-  res.json({ ride: await cancelRide(req.role, req.account.id, param(req)) });
+  const why = parse(
+    z.object({ reason: z.enum(CANCEL_REASONS).optional(), comment: z.string().max(300).optional() }),
+    req.body ?? {},
+  );
+  res.json({ ride: await cancelRide(req.role, req.account.id, param(req), why) });
 });
 
 ridesRouter.post('/:id/rate', async (req, res) => {

@@ -459,8 +459,13 @@ class FareOption {
     this.capacityKg,
     this.helpers = false,
     this.negotiated = false,
+    this.etaS,
   });
   final String category, label, group, description;
+
+  /// Segundos até chegar o motorista livre mais próximo deste serviço
+  /// (null = nenhum perto, ou servidor antigo).
+  final int? etaS;
 
   /// Preço da tarifa (0 nos serviços de preço combinado).
   final int fare;
@@ -494,6 +499,7 @@ class FareOption {
     seats: (o['seats'] as num?)?.round(),
     capacityKg: (o['capacityKg'] as num?)?.round(),
     helpers: o['helpers'] as bool? ?? false,
+    etaS: (o['etaS'] as num?)?.round(),
   );
 }
 
@@ -513,8 +519,12 @@ class Estimate {
     this.fareStep = 50,
     this.surgeMultiplier = 1,
     this.surgeLabel,
+    this.nearbyDrivers = 0,
   });
   final int distanceM, durationS;
+
+  /// Motoristas livres perto da recolha (todos os serviços).
+  final int nearbyDrivers;
 
   /// Taxa por procura em vigor (já incluída nos preços das opções): ×1 sem
   /// taxa. [surgeLabel] é o motivo ("Procura alta", "Tarifa nocturna").
@@ -568,5 +578,6 @@ class Estimate {
         ((j['surge'] as Map<String, dynamic>?)?['multiplier'] as num? ?? 1)
             .toDouble(),
     surgeLabel: (j['surge'] as Map<String, dynamic>?)?['label'] as String?,
+    nearbyDrivers: (j['nearbyDrivers'] as num? ?? 0).round(),
   );
 }

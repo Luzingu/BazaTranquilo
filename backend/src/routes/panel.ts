@@ -64,6 +64,7 @@ import {
   subscriptionState,
   setIntercityCommissionRate,
   setOtpEnabled,
+  setSignupSmsEnabled,
   setFreeRides,
 } from '../services/settings.js';
 import { balanceOf, freeRidesLeft } from '../services/balance.js';
@@ -858,13 +859,15 @@ admin.get('/acesso', async (_req, res) => {
       unverified: await (M as typeof PassengerModel).countDocuments({ phoneVerified: false }),
     })),
   );
-  res.json({ otp: settings.otpEnabled, passengers, drivers });
+  res.json({ otp: settings.otpEnabled, signupSms: settings.signupSmsEnabled, passengers, drivers });
 });
 
 admin.post('/acesso', async (req, res) => {
-  const body = parse(z.object({ otp: z.boolean() }), req.body);
-  await setOtpEnabled(body.otp, (await AdminModel.findById(req.panel.id))?.name ?? 'Administrador');
-  res.json({ otp: settings.otpEnabled });
+  const body = parse(z.object({ otp: z.boolean().optional(), signupSms: z.boolean().optional() }), req.body);
+  const by = (await AdminModel.findById(req.panel.id))?.name ?? 'Administrador';
+  if (body.otp !== undefined) await setOtpEnabled(body.otp, by);
+  if (body.signupSms !== undefined) await setSignupSmsEnabled(body.signupSms, by);
+  res.json({ otp: settings.otpEnabled, signupSms: settings.signupSmsEnabled });
 });
 
 /** Documentos à espera de revisão. */

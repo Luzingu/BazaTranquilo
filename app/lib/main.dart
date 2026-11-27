@@ -13,11 +13,18 @@ import 'services/notifier.dart';
 import 'state/session.dart';
 import 'widgets/common.dart';
 import 'widgets/desktop_frame.dart';
+import 'widgets/escolha_servidor.dart';
 import 'widgets/made_by.dart';
 import 'widgets/porteiro_versao.dart';
 
+/// Chave do navegador: a pergunta «Continuar sem saldo?» abre-se por ela (escolha de servidor, 2026-11-27).
+final navegadorDaApp = GlobalKey<NavigatorState>();
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  // Escolha de servidor (2026-11-27): bazatranquilo.com e, sem saldo de dados, angoschool.org/baza.
+  ligarEscolhaDeServidor();
+  instalarEscolhaDeServidor(navegadorDaApp);
   // O app é pensado para o telemóvel ao alto (mapa e painéis em baixo); deitado,
   // os ecrãs ficam sem espaço. Na web o browser decide.
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
@@ -37,6 +44,7 @@ class BazaApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navegadorDaApp,
       title: appFullName,
       debugShowCheckedModeBanner: false,
       theme: bazaTheme(),
@@ -44,7 +52,10 @@ class BazaApp extends StatelessWidget {
       // O selo "Criado por Luzingu Tech" fica por cima de todas as telas; o porteiro da versão por cima de tudo
       // (bloqueia uma versão abaixo da mínima — ver widgets/porteiro_versao.dart).
       builder: (context, child) => DesktopFrame(
-        child: PorteiroVersao(child: MadeBySeal(child: child ?? const SizedBox())),
+        child: FaixaServidor(
+          navegador: navegadorDaApp,
+          child: PorteiroVersao(child: MadeBySeal(child: child ?? const SizedBox())),
+        ),
       ),
       home: const _Root(),
     );

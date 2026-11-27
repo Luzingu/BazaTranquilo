@@ -1288,8 +1288,18 @@ const sections = {
               badge(a.otp ? ['ok', 'Ligado'] : ['wait', 'Desligado']),
               a.otp
                 ? 'O app pede o código SMS para entrar. A senha só é pedida se o SMS falhar, se o código não chegar ou se o utilizador não tiver o telefone consigo.'
-                : 'O app pede a senha a quem já tem conta, sem enviar SMS. Criar conta continua a exigir o código, para confirmar o número.',
+                : `O app pede a senha a quem já tem conta, sem enviar SMS. ${a.signupSms === false ? 'Criar conta também não envia SMS (ver abaixo).' : 'Criar conta continua a pedir o código, para confirmar o número.'}`,
               `<button type="button" class="btn${a.otp ? ' danger' : ' primary'}" id="otp-toggle">${a.otp ? 'Desligar' : 'Voltar a ligar'}</button>`,
+            )}
+            ${a.signupSms === undefined ? '' : setting(
+              'sms',
+              a.signupSms ? 'green' : 'amber',
+              'Código por SMS ao criar conta',
+              badge(a.signupSms ? ['ok', 'Ligado'] : ['wait', 'Desligado']),
+              a.signupSms
+                ? 'Quem cria conta recebe um código por SMS para confirmar o número. Se o SMS falhar, a conta cria-se na mesma, com o número por confirmar.'
+                : 'Não se envia SMS a quem cria conta: escolhe a senha e entra logo, com o número por confirmar. O app não volta a pedir o código enquanto isto estiver desligado.',
+              `<button type="button" class="btn${a.signupSms ? ' danger' : ' primary'}" id="signup-sms-toggle">${a.signupSms ? 'Suspender' : 'Voltar a ligar'}</button>`,
             )}
             ${setting('key', 'blue', 'Contas com senha', `${esc(a.passengers.withPassword + a.drivers.withPassword)} de ${esc(a.passengers.total + a.drivers.total)}`, `${esc(a.passengers.withPassword)} de ${esc(a.passengers.total)} passageiros e ${esc(a.drivers.withPassword)} de ${esc(a.drivers.total)} motoristas.${without > 0 ? ' As restantes criam a senha na próxima vez que abrirem o app.' : ''} Para repor uma senha esquecida, use "Repor senha" em Motoristas ou Passageiros.${a.passengers.unverified + a.drivers.unverified > 0 ? ` ${esc(a.passengers.unverified + a.drivers.unverified)} com o número por confirmar (criadas quando o SMS falhou): o app pede o código quando o SMS voltar a funcionar.` : ''}`, '')}
           </div>`;
@@ -1320,6 +1330,11 @@ const sections = {
         toggle.onclick = () => {
           if (a.otp && !confirm('Desligar o código por SMS para entrar? Quem já tem conta passa a entrar só com o número e a senha. Criar conta continua a pedir o código.')) return;
           act(toggle, () => api('/admin/acesso', { method: 'POST', body: { otp: !a.otp } }).then(again));
+        };
+        const signupToggle = $('#signup-sms-toggle');
+        if (signupToggle) signupToggle.onclick = () => {
+          if (a.signupSms && !confirm('Suspender o SMS ao criar conta? As contas novas criam-se só com a senha e ficam com o número por confirmar.')) return;
+          act(signupToggle, () => api('/admin/acesso', { method: 'POST', body: { signupSms: !a.signupSms } }).then(again));
         };
       },
     },

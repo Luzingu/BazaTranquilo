@@ -5,11 +5,18 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 
+import 'servidores.dart';
+
 const _apiUrl = String.fromEnvironment('API_URL');
+
+/// Liga a escolha de servidor (2026-11-27) quando a app foi compilada contra a produção. Chamar no `main()`.
+void ligarEscolhaDeServidor() => Servidores.activa = _apiUrl == Servidores.principalProducao;
 
 /// Endereço da API. Defina com `--dart-define=API_URL=http://192.168.x.x:4000`
 /// para testar num telemóvel real.
 String get apiBaseUrl {
+  // Produção: o servidor escolhido (bazatranquilo.com ou, sem saldo de dados, angoschool.org/baza) — core/servidores.dart
+  if (Servidores.activa) return Servidores.baseActiva;
   if (_apiUrl.isNotEmpty) return _apiUrl;
   // No emulador Android, 10.0.2.2 aponta para o computador anfitrião.
   if (!kIsWeb && Platform.isAndroid) return 'http://10.0.2.2:4000';
@@ -29,6 +36,7 @@ String get tileUrlTemplate => ownTiles
 /// Pergunta ao servidor se tem mapas próprios. Sem resposta, fica o mapa público.
 Future<void> loadMapConfig() async {
   try {
+    await Servidores.garantir(); // pergunta ao servidor escolhido (sem saldo: angoschool.org/baza — tem os mesmos mapas)
     final res = await http
         .get(Uri.parse('$apiBaseUrl/map/config'))
         .timeout(const Duration(seconds: 4));

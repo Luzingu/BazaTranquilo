@@ -6,6 +6,7 @@ import 'package:socket_io_client/socket_io_client.dart' as sio;
 
 import '../core/api.dart';
 import '../core/config.dart';
+import '../core/servidores.dart';
 import '../core/models.dart';
 import '../services/notifier.dart';
 import '../services/push.dart';
@@ -385,11 +386,30 @@ class Session extends ChangeNotifier {
   }
 
   // ── Tempo real ────────────────────────────────────────────────────────────
+  /// Ouvintes registados pelos outros estados (corrida, motorista, chamada): voltam a ligar-se ao socket NOVO quando
+  /// ele é recriado (ex.: mudou o servidor — escolha de servidor, 2026-11-27).
+  final _ouvintes = <String, List<void Function(dynamic)>>{};
+  bool _ouveServidor = false;
+
+  /// Mudou o servidor (bazatranquilo.com ↔ angoschool.org/baza): com sessão aberta, o tempo real liga-se ao novo.
+  void _servidorMudou() {
+    if (_socket != null) _connect();
+  }
+
   void _connect() {
+    if (!_ouveServidor) {
+      _ouveServidor = true;
+      Servidores.activo.addListener(_servidorMudou);
+    }
     _socket?.dispose();
+    // Com o servidor sem saldo a API está num CAMINHO (angoschool.org/baza): o socket.io liga à origem com esse
+    // prefixo no caminho (`/baza/socket.io`) — um caminho no endereço seria lido como «namespace».
+    final base = Uri.parse(apiBaseUrl);
+    final prefixo = base.path.replaceAll(RegExp(r'/+$'), '');
     _socket = sio.io(
-      apiBaseUrl,
+      base.origin,
       sio.OptionBuilder()
+          .setPath('$prefixo/socket.io')
           .setTransports(['websocket'])
           .setAuth({'token': api.token})
           .enableForceNew()
@@ -398,12 +418,22 @@ class Session extends ChangeNotifier {
     )..connect();
     // O servidor avisa quando a conta muda (ex.: documentos aprovados ou rejeitados).
     _socket!.on('account:update', (_) => refreshUser().catchError((_) {}));
+    for (final e in _ouvintes.entries) {
+      for (final h in e.value) {
+        _socket!.on(e.key, h);
+      }
+    }
   }
 
-  void on(String event, void Function(dynamic) handler) =>
-      _socket?.on(event, handler);
-  void off(String event, void Function(dynamic) handler) =>
-      _socket?.off(event, handler);
+  void on(String event, void Function(dynamic) handler) {
+    (_ouvintes[event] ??= []).add(handler);
+    _socket?.on(event, handler);
+  }
+
+  void off(String event, void Function(dynamic) handler) {
+    _ouvintes[event]?.remove(handler);
+    _socket?.off(event, handler);
+  }
   void emit(String event, Map<String, dynamic> data) {
     if (_socket?.connected ?? false) _socket!.emit(event, data);
   }

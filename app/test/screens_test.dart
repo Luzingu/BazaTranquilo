@@ -249,8 +249,8 @@ void main() {
 
     final expected = {
       'searching': 'À procura de motorista…',
-      'accepted': 'Motorista a caminho',
-      'arrived': 'O motorista chegou',
+      'accepted': 'José está a caminho',
+      'arrived': 'José chegou',
       'in_progress': 'Em viagem',
       'completed': 'Chegou ao destino',
       'no_drivers': 'Sem motoristas disponíveis',

@@ -88,7 +88,8 @@ class _AuthScreenState extends State<AuthScreen> {
   /// Bilhete para criar a conta sem o código (o SMS falhou).
   String? _signupTicket;
 
-  /// Porque se pede a senha: `otp_off`, `sms_failed` ou `no_code`.
+  /// Porque se pede a senha: `otp_off`, `sms_failed` ou `no_code`; na conta
+  /// nova sem código, `sms_failed` ou `signup_sms_off` (suspenso no painel).
   String? _reason;
 
   /// No passo do código: a conta tem senha, por isso pergunta-se se prefere
@@ -469,7 +470,7 @@ class _AuthScreenState extends State<AuthScreen> {
     ];
   }
 
-  /// O SMS não saiu e é uma conta nova: cria-se só com a senha.
+  /// Conta nova sem código (o SMS falhou ou está suspenso no painel): cria-se só com a senha.
   List<Widget> _signupStep() => [
     Container(
       padding: const EdgeInsets.all(14),
@@ -478,14 +479,22 @@ class _AuthScreenState extends State<AuthScreen> {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: BazaColors.yellow),
       ),
-      child: const Row(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.sms_failed_outlined, color: BazaColors.ink),
-          SizedBox(width: 10),
+          Icon(
+            _reason == 'signup_sms_off'
+                ? Icons.lock_outline
+                : Icons.sms_failed_outlined,
+            color: BazaColors.ink,
+          ),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Não conseguimos enviar o SMS agora. Não faz mal: crie a sua senha e entre já. Confirmamos o número mais tarde, quando o SMS voltar a funcionar.',
+              // `signup_sms_off`: o SMS ao criar conta está suspenso no painel.
+              _reason == 'signup_sms_off'
+                  ? 'Crie a sua senha e entre já. Vai usar o seu número e esta senha sempre que entrar.'
+                  : 'Não conseguimos enviar o SMS agora. Não faz mal: crie a sua senha e entre já. Confirmamos o número mais tarde, quando o SMS voltar a funcionar.',
             ),
           ),
         ],

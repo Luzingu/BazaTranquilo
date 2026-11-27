@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
+import '../core/servidores.dart';
 import '../core/models.dart';
 import '../services/notifier.dart';
 import 'ride_state.dart';
@@ -312,6 +313,9 @@ class CallState extends ChangeNotifier {
     final pc = await createPeerConnection({
       'iceServers': res['iceServers'],
       'sdpSemantics': 'unified-plan',
+      // Sem saldo de dados (angoschool.org/baza, 2026-11-27): o áudio passa TODO pelo relé do Serve2 (que o servidor
+      // de lá indica em `iceServers`) — o telemóvel só fala com o endereço do acordo das operadoras.
+      if (Servidores.activa && Servidores.activo.value.semSaldo) 'iceTransportPolicy': 'relay',
     });
     _pc = pc;
     for (final track in _local!.getAudioTracks()) {

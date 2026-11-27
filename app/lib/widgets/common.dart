@@ -10,8 +10,11 @@ import '../core/theme.dart';
 
 /// Painel branco arredondado que assenta no fundo do ecrã, sobre o mapa.
 class BottomPanel extends StatelessWidget {
-  const BottomPanel({super.key, required this.children});
+  const BottomPanel({super.key, required this.children, this.footer});
   final List<Widget> children;
+
+  /// Barra fixa por baixo do conteúdo (não desliza com ele): o botão principal.
+  final Widget? footer;
 
   @override
   Widget build(BuildContext context) {
@@ -29,13 +32,30 @@ class BottomPanel extends StatelessWidget {
         ),
         child: SafeArea(
           top: false,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: children,
-            ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.fromLTRB(20, 20, 20, footer == null ? 16 : 8),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: children,
+                  ),
+                ),
+              ),
+              if (footer != null)
+                Container(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    border: Border(top: BorderSide(color: Color(0xFFEDEEF0))),
+                  ),
+                  child: footer,
+                ),
+            ],
           ),
         ),
       ),

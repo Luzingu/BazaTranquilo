@@ -31,7 +31,13 @@ class BazaMap extends StatefulWidget {
     this.route = const [],
     this.bottomPadding = 0,
     this.fitKey = '',
+    this.pickupLabel,
+    this.dropoffLabel,
   });
+
+  /// Texto da etiqueta da recolha e do destino (com [labels]), em vez de
+  /// "Recolha"/"Destino": "2 min" (carro mais próximo), "chegada às 8:38".
+  final String? pickupLabel, dropoffLabel;
 
   final LatLng? me;
   final LatLng? pickup;
@@ -270,7 +276,7 @@ class BazaMapState extends State<BazaMap> with SingleTickerProviderStateMixin {
     const tag = 24.0;
     return Marker(
       point: point,
-      width: 110,
+      width: 150,
       height: size + 2 * tag,
       child: Column(
         children: [
@@ -388,7 +394,7 @@ class BazaMapState extends State<BazaMap> with SingleTickerProviderStateMixin {
             if (widget.pickup != null)
               _place(
                 widget.pickup!,
-                'Recolha',
+                widget.pickupLabel ?? 'Recolha',
                 Icons.person_pin_circle,
                 BazaColors.green,
               ),
@@ -401,7 +407,12 @@ class BazaMapState extends State<BazaMap> with SingleTickerProviderStateMixin {
                 size: 26,
               ),
             if (widget.dropoff != null)
-              _place(widget.dropoff!, 'Destino', Icons.flag, BazaColors.red),
+              _place(
+                widget.dropoff!,
+                widget.dropoffLabel ?? 'Destino',
+                Icons.flag,
+                BazaColors.red,
+              ),
             if (widget.alert != null)
               _place(
                 widget.alert!,

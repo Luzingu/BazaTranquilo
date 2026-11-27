@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/servidores.dart';
+import '../widgets/escolha_servidor.dart';
 import '../core/format.dart';
 import '../core/theme.dart';
 import '../state/call_state.dart';
@@ -402,6 +404,16 @@ class _Menu extends StatelessWidget {
               title: const Text('Ajuda e suporte'),
               onTap: () => open(const SupportScreen()),
             ),
+            if (Servidores.activa)
+              ListTile(
+                leading: const Icon(Icons.cloud_off),
+                title: const Text('Ligação ao servidor'),
+                subtitle: Text(Servidores.activo.value.semSaldo ? 'Sem saldo de dados (angoschool.org)' : 'Principal'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  abrirEscolhaServidor(context);
+                },
+              ),
             const Divider(),
             ListTile(
               leading: const Icon(Icons.logout),

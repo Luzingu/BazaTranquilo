@@ -158,6 +158,14 @@ export const config = {
   publicUrl: (env.PUBLIC_URL ?? `http://localhost:${env.PORT ?? 4000}`).replace(/\/$/, ''),
   /** Número de emergência para que o botão SOS liga (polícia, em Angola). */
   emergencyNumber: env.EMERGENCY_NUMBER ?? '111',
+  /**
+   * Réplica no Serve2 (2026-11-27): a mesma API corre nos dois servidores (Serve2 = entrada sem saldo de dados,
+   * `https://angoschool.org/baza`). `REALTIME_CLUSTER=mongo` liga o tempo real dos dois pela base partilhada
+   * (adaptador socket.io para MongoDB): um evento emitido num servidor chega às ligações do outro.
+   */
+  realtimeCluster: env.REALTIME_CLUSTER === 'mongo',
+  /** Tarefas periódicas (escalar alertas, apagar áudios, expirar referências): SÓ num servidor (`PERIODIC_TASKS=false` no Serve2). */
+  periodicTasks: env.PERIODIC_TASKS !== 'false',
 
   /**
    * Carteira no app (saldo, pagamento por carteira, comissões e levantamentos).

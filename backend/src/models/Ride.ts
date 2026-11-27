@@ -82,6 +82,9 @@ const rideSchema = new Schema(
     cancelledBy: { type: String, enum: ['passenger', 'driver'] },
     /** Cancelada tarde (depois do período sem penalização): conta para a suspensão. */
     lateCancel: { type: Boolean, default: false },
+    /** Motivo escolhido por quem cancelou (lista do app) e comentário opcional. */
+    cancelReason: { type: String, maxlength: 40 },
+    cancelComment: { type: String, maxlength: 300 },
     passengerRating: Number, // nota dada ao passageiro
     driverRating: Number, // nota dada ao motorista
     acceptedAt: Date,

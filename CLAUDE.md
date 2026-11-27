@@ -32,6 +32,7 @@ App de táxi para Angola (nome completo "Bazá Tranquilo", lema "Bazá com Segur
 
 - Entrar: o utilizador escreve só o número; o servidor decide se pede o código SMS ou a senha, conforme o painel (Definições). No primeiro ecrã NÃO há botão "entrar com senha"; no ecrã do código, quem tem senha pode optar por ela ("Não tem o telefone consigo?"), e a senha é pedida automaticamente quando o código está desligado, o envio do SMS falha ou o código não chega. Criar conta: o número é confirmado por SMS e só depois se define a senha (obrigatória). O login por email continua descontinuado.
 - **Se o SMS falhar ao criar a conta, a pessoa avança na mesma** (decidido pelo utilizador, 2026-11-24): o servidor dá um bilhete de 15 min (`/auth/start` → `method: signup`), a pessoa escolhe a senha (`POST /auth/signup`) e a conta fica com `phoneVerified: false`. O app pede a confirmação mais tarde (`app/lib/widgets/phone_confirm.dart`), **só quando o SMS está a funcionar** (`smsLooksHealthy()`: sem falha nos últimos 10 min e com saldo na TelcoSMS) **e a pessoa não está numa corrida** (nem, sendo motorista, online); "Agora não" adia 2 h, 12 h e depois 1 dia; há também um aviso "Número por confirmar" no menu e em "Os meus dados". Só conta como falha um erro do servidor ou da operadora (5xx), não o limite de envios nem um número não angolano.
+- **SMS ao criar conta pode ser suspenso no painel** (pedido do utilizador, 2026-11-27): Definições › Entrada no app › «Código por SMS ao criar conta» (`settings.signupSmsEnabled`, chave `signupSmsEnabled` em `definicoes`; `POST /painel/api/admin/acesso {signupSms}`). Suspenso: `/auth/start` de um número novo responde `method: signup`, `reason: signup_sms_off` (conta só com a senha, número por confirmar), `/auth/otp/request` para número novo dá 403, e o app **não** pede a confirmação depois enquanto estiver suspenso (`confirmationBlock` → `sms_down`). Independente do código para entrar (`otpEnabled`).
 - Até confirmar, a conta **não viaja por conta de empresa**. Quem confirmar depois o número por SMS no ecrã de entrada é o dono: a conta passa a confirmada, as sessões antigas caem (`sessionVersion`) e a senha volta a ser definida.
 
 ## Um número, um só tipo de conta (decidido pelo utilizador, 2026-11-24)
@@ -77,6 +78,7 @@ Detalhes, comandos e tabelas em `PRODUCAO.md`. A instalação num servidor real 
 - **Selo de autoria** (decidido pelo utilizador, 2026-11-24): "Criado por Luzingu Tech" em todas as telas, discreto no canto de baixo (`app/lib/widgets/made_by.dart`, ligado em `MaterialApp.builder`, por isso as telas novas já o têm; não recebe toques e esconde-se com o teclado aberto). No computador aparece também no painel da marca. O texto está na constante `madeBy`.
 - **Pensar em quem tem pouca prática com o telemóvel** (decidido pelo utilizador, 2026-11-24): ícones grandes e com cor ao lado do texto, ajudas que dizem o que falta. Campos de número de telefone: usar **sempre** `PhoneField` (`app/lib/widgets/common.dart`) — ícone de telefone num quadrado amarelo, +244 em destaque, algarismos grandes e ajuda ao vivo («Faltam 3 números», verde com visto quando completo, aviso se não começar por 9).
 - **Ecrã de arranque com bolinhas** (decidido pelo utilizador, 2026-11-26): por trás da seta e do nome, bolinhas brancas (e algumas escuras, discretas) sobem e espalham-se pelo amarelo — `app/lib/widgets/floating_bubbles.dart`, o mesmo efeito do ecrã de abertura da app AngoSchool, copiado e adaptado (os produtos não partilham código). Paradas com «reduzir animações».
+- **Pedir corrida ao estilo Yango** (pedido do utilizador, 2026-11-27, capturas de referência em `Yango/`): recolha e destino em linhas finas (destino com a duração e o botão «Paragens»); separadores «Viagens» / «Entregas e carga»; **viaturas em cartões lado a lado a deslizar** (`app/lib/widgets/vehicle_picker.dart`: desenho próprio de cada tipo em `VehicleArt` — nunca imagens da Yango —, minutos até chegar o carro mais próximo, verde no mais rápido, nome e preço; o escolhido com fundo cinzento; no fim o cartão «A combinar»); barra fixa por baixo com pagamento · **Pedir** · «Mais opções» (motorista preferido e propor preço); no mapa «N min» na recolha e «chegada às 8:38» no destino. À procura: «Mais de 5 motoristas perto», relógio do pedido e o percurso num cartão. Cancelar: «Tem a certeza?» (Cancelar / Aguardar) e depois «O que aconteceu?» com motivos (guardados em `cancelReason`/`cancelComment`; lista em `CANCEL_REASONS`, `services/rides.ts`). O servidor dá os minutos por serviço e os motoristas livres perto em `/rides/estimate` (`etaS`, `nearbyDrivers`; `supplyNear()`, linha recta ×1,4 a 22 km/h + 1 min) — **nunca as posições**. Mantém-se o amarelo do Bazá.
 - Depois de mudar o app, recompilar a versão web e ver capturas em telemóvel e em computador antes de entregar.
 
 ## Instalação actual (2026-11-22)
@@ -105,3 +107,34 @@ A correr em `https://bazatranquilo.com`, no servidor Serve1 da Luzingu, em `/var
 - O Bazá é gerido pela equipa Luzingu do AngoSchool: `LEGAL_ENTITY`, `SUPPORT_*` e `COMMISSION_PAY_INFO` no `.env` usam os dados da Luzingu (os mesmos de `angoschool/backend/app/Data/ContactosLuzingu.php`; se lá mudarem, mudar aqui). `SUPPORT_PHONE` leva **um só** número: o app liga para ele (`tel:`).
 - Textos da Google Play (ficha, serviços em primeiro plano, segurança dos dados): `PLAY_STORE.md`.
 - **Actualizações do app** (2026-11-26, como nas apps AngoSchool): versão mínima/aviso em `site/app-versao.json` (sem reiniciar nada; ⛔ nunca subir a `minima` antes de a versão estar na loja) e correcções sem loja pelo **Shorebird** (`app/shorebird.yaml`). Versão para a loja SEMPRE com `bash app/tools/compilar_loja.sh` (commit fixo, Shorebird); correcções com `bash app/tools/publicar_correcao.sh`. Detalhe: `PRODUCAO.md` › «Actualizações do app». Mudar o uso da localização, do microfone ou dos dados obriga a actualizar esse ficheiro e a Política de Privacidade.
+
+## Sem saldo de dados — réplica da API no Serve2 (2026-11-27, decisão do dono)
+
+O Bazá aproveita o acordo do `angoschool.org` com as operadoras: **`https://angoschool.org/baza`** é uma segunda entrada da
+API, que funciona sem saldo de dados. Só o backend tem réplica (a app está no telefone). Regra da casa: o que não está no
+Serve2 pede-se internamente ao Serve1.
+
+- **Réplica**: serviço `baza` no Serve2 (`/var/www/BazaTranquilo/backend`, utilizador `baza`, `127.0.0.1:4000`), MESMA base
+  (replica set). `.env` PRÓPRIO do Serve2 (não é sincronizado): `PERIODIC_TASKS=false`, mapas por `127.0.0.1:4010`, relé do `.org`.
+  Código chega pelo `/root/sync_servers.sh` (push de `backend/` sem `.env`/`src`/`tests`; reinicia a réplica se mudar
+  `dist/`, `node_modules/` ou `panel/`). ⛔ Depois de `npm run build` no Serve1, a réplica reinicia sozinha no minuto seguinte.
+- **Tempo real entre os dois**: `REALTIME_CLUSTER=mongo` (nos dois) → adaptador `@socket.io/mongo-adapter` sobre a colecção
+  capada `socketio_eventos` da base `baza` (`enableClusterAdapter()` em `services/realtime.ts`): emitir, «está ligado?» e desligar
+  sessões valem para as ligações dos DOIS servidores. Prova: `tests/cluster-dois-servidores.mjs` (4 PASS).
+- **Tarefas periódicas só no Serve1** (`PERIODIC_TASKS`): escalar alertas, apagar áudios, expirar referências. A procura de
+  motorista é segura nos dois (cada passo confirma o estado na base antes de mudar).
+- **Mapas**: só no Serve1. Serve1 abre `/interno-serve2/{osrm,photon,mapa}/` (nginx do `bazatranquilo.com`) **só ao IP do
+  Serve2**; no Serve2 o ponto local `127.0.0.1:4010` (`sites-available/baza-replica-interno`) vai lá pelo IP (o AAAA de
+  `bazatranquilo.com` não responde) e guarda as imagens do mapa em cache 7 dias (`/var/cache/nginx/baza_mapa`).
+- **Entrada**: nginx do Serve2, `snippets/baza-org.conf` no bloco de `angoschool.org` (tira o prefixo `/baza`; socket.io em
+  `/baza/socket.io/`; `app-versao.json` pedido ao Serve1).
+- **Chamadas**: relé TURN do Bazá no Serve2 (`turn-baza-org`, coturn em Docker, `/etc/coturn-baza-org/`, portas 3479/5350 e
+  relé 41000–41100/udp só do Serve1), utilizador = `TURN_*` do `.env` da réplica; só reencaminha para os relés do Bazá nos 2 servidores.
+- **App**: `lib/core/servidores.dart` (copiado e adaptado da app AngoSchool): `bazatranquilo.com` principal e
+  `angoschool.org/baza` sem saldo; sonda `GET /health?n=` (marcador `baza-saude-v1`); pergunta antes de mudar
+  (`widgets/escolha_servidor.dart`), faixa «Modo sem saldo», menu › «Ligação ao servidor». Pedidos: leituras repetem no outro
+  servidor; escritas só se a ligação falhou antes de sair. Socket.io volta a ligar ao mudar (`Session._servidorMudou`); em
+  modo sem saldo as chamadas usam `iceTransportPolicy: relay`. Só na compilação de produção (`API_URL=https://bazatranquilo.com`).
+  Teste `test/servidores_test.dart` (5). ⛔ Nas apps instaladas só chega com versão nova na loja.
+- ⚠️ Sem saldo continuam a não funcionar: notificações com a app fechada (Firebase), «Navegar» (Google Maps), correcções
+  Shorebird. ⚠️ Falta o teste do dono com um cartão sem saldo (incluindo uma chamada).

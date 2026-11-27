@@ -144,6 +144,9 @@ async function run() {
   const est = await call('POST', '/rides/estimate', pas.token, { pickup: here, dropoff: there });
   check('estimativa devolve os 9 serviços', est.options?.length === 9);
   check('carteira desligada: não é forma de pagamento', !est.paymentMethods.includes('wallet'));
+  check('estimativa diz quantos motoristas livres há perto', Number.isInteger(est.nearbyDrivers));
+  check('cada serviço traz o tempo até chegar um carro (ou null)', est.options.every((o) => o.etaS === null || Number.isInteger(o.etaS)));
+  check('a estimativa não revela posições de motoristas', !JSON.stringify(est).includes('coordinates'));
   const via = await call('POST', '/rides/estimate', pas.token, { pickup: here, dropoff: there, stops: [{ lat: -8.8147, lng: 13.2302 }] });
   const eco = (e) => e.options.find((o) => o.category === 'economy').fare;
   check('uma paragem aumenta o preço', eco(via) > eco(est), `${eco(est)} → ${eco(via)}`);
@@ -267,9 +270,20 @@ async function run() {
   await call('POST', `/rides/${ride.id}/cancel`, pas.token);
   await call('POST', '/driver/online', dc.token, { online: false });
   await call('POST', '/driver/online', d1.token, { online: true, location: here });
+  {
+    const e = await call('POST', '/rides/estimate', pas.token, trip);
+    const eta = e.options.find((o) => o.category === 'economy').etaS;
+    check('motorista Económico online na recolha: o Económico mostra o tempo até chegar', Number.isInteger(eta) && eta >= 60 && eta < 180, String(eta));
+    check('e conta como motorista livre perto', e.nearbyDrivers >= 1);
+  }
   ride = (await call('POST', '/rides', pas.token, { ...trip, category: 'comfort' })).ride;
   check('Económico não recebe pedido Conforto', (await call('GET', '/driver/offers', d1.token)).offers.length === 0);
-  check('cancelar corrida à procura', (await call('POST', `/rides/${ride.id}/cancel`, pas.token)).ride?.status === 'cancelled');
+  check('motivo de cancelamento desconhecido é recusado', (await call('POST', `/rides/${ride.id}/cancel`, pas.token, { reason: 'inventado' })).s === 400);
+  check('cancelar corrida à procura, com motivo', (await call('POST', `/rides/${ride.id}/cancel`, pas.token, { reason: 'changed_plans', comment: 'Já não preciso' })).ride?.status === 'cancelled');
+  {
+    const doc = await mongoose.connection.collection('corridas').findOne({ _id: new mongoose.Types.ObjectId(ride.id) });
+    check('o motivo e o comentário ficam guardados', doc?.cancelReason === 'changed_plans' && doc?.cancelComment === 'Já não preciso');
+  }
 
   group('Preferidos e locais guardados');
   const stranger = await makeDriver('923000005', 'Desconhecido', 'LD-44-44-DD');
@@ -945,6 +959,22 @@ async function run() {
     check('se o código não chega, quem tem senha pode usá-la', (await call('POST', '/auth/start', null, { phone: '923000777', role: 'passenger', noCode: true })).method === 'password');
     check('quem não tem senha continua à espera do código', (await call('POST', '/auth/start', null, { phone: '923000780', role: 'passenger', noCode: true })).method === 'otp');
     check('o código SMS volta a funcionar', (await call('POST', '/auth/otp/request', null, { phone: '923000779', role: 'passenger' })).s === 200);
+
+    // SMS ao criar conta suspenso no painel.
+    check('o painel mostra o SMS ao criar conta ligado', (await call('GET', `${P}/admin/acesso`, adm.token)).signupSms === true);
+    r = await call('POST', `${P}/admin/acesso`, adm.token, { signupSms: false });
+    check('o administrador suspende o SMS ao criar conta (sem mexer no da entrada)', r.signupSms === false && r.otp === true);
+    r = await call('POST', '/auth/start', null, { phone: '923000781', role: 'passenger' });
+    check('SMS ao criar conta suspenso: conta nova cria-se só com a senha, sem código', r.method === 'signup' && r.reason === 'signup_sms_off' && typeof r.signupTicket === 'string' && !r.devCode);
+    check('e nem se pede o código à parte', (await call('POST', '/auth/otp/request', null, { phone: '923000781', role: 'passenger' })).s === 403);
+    const semSms = await call('POST', '/auth/signup', null, { ticket: r.signupTicket, password: 'segredo1' });
+    check('a conta fica criada, com o número por confirmar', semSms.s === 200 && semSms.user.phoneVerified === false);
+    check('o app não pede a confirmação do número enquanto estiver suspenso', (await call('GET', '/me/phone-confirmation', semSms.token)).canAskNow === false);
+    r = await call('POST', '/auth/start', null, { phone: '923000777', role: 'passenger' });
+    check('quem já tem conta continua a entrar com o código SMS', r.method === 'otp' && /^\d{6}$/.test(r.devCode));
+    await call('POST', `${P}/admin/acesso`, adm.token, { signupSms: true });
+    r = await call('POST', '/auth/start', null, { phone: '923000782', role: 'passenger' });
+    check('religado: conta nova volta a receber o código', r.method === 'otp' && /^\d{6}$/.test(r.devCode));
   }
 
   group('Criar conta quando o SMS falha');

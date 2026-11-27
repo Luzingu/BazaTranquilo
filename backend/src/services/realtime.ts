@@ -1,5 +1,7 @@
 import type { Server as HttpServer } from 'node:http';
 import { Server } from 'socket.io';
+import { createAdapter } from '@socket.io/mongo-adapter';
+import mongoose from 'mongoose';
 import { z } from 'zod';
 import { verifyToken } from '../http.js';
 import { findAccountById, type Role } from '../models/accounts.js';
@@ -8,6 +10,24 @@ import { pushEnabled, pushForEvent, pushToUser } from './push.js';
 import { updateDriverLocation } from './rides.js';
 
 let io: Server | undefined;
+
+/** Colecção (capada) por onde os servidores trocam os eventos em tempo real (réplica no Serve2, 2026-11-27). */
+const COLECCAO_EVENTOS = 'socketio_eventos';
+
+/**
+ * Liga o tempo real deste servidor ao dos outros (Serve1 ↔ Serve2) pela base partilhada — `REALTIME_CLUSTER=mongo`.
+ * Com o adaptador, `emit`, `fetchSockets` e `disconnectSockets` passam a valer para as ligações de TODOS os servidores:
+ * o motorista ligado a um recebe o pedido feito no outro. Chamar depois de `mongoose.connect` (precisa do replica set).
+ */
+export async function enableClusterAdapter() {
+  const db = mongoose.connection.db;
+  if (!io || !db) return;
+  const existe = await db.listCollections({ name: COLECCAO_EVENTOS }).hasNext();
+  if (!existe) await db.createCollection(COLECCAO_EVENTOS, { capped: true, size: 8 * 1024 * 1024 }).catch(() => undefined);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- o driver do mongoose e o do adaptador são o mesmo pacote
+  io.adapter(createAdapter(db.collection(COLECCAO_EVENTOS) as any));
+  console.log('Tempo real: ligado aos outros servidores pela base de dados.');
+}
 
 /** Desliga as ligações em tempo real de uma conta (as sessões dela deixaram de valer). */
 export function dropLiveSessions(userId: string) {

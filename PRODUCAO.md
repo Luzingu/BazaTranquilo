@@ -289,3 +289,48 @@ O mesmo desenho das apps AngoSchool (detalhe e regras: `/var/www/angoschool_fron
   - Versão para a loja: `bash app/tools/compilar_loja.sh appbundle [commit]` — compila de um commit fixo (o trabalho por commitar não entra), com `shorebird release android`, `API_URL=https://bazatranquilo.com` e `APP_VERSAO` tirado do `pubspec.yaml`; o ficheiro fica em `app/build/loja/`. ⛔ Uma versão compilada com `flutter build` não recebe correcções.
   - Correcção: `bash app/tools/publicar_correcao.sh [percentagem] [commit]` (só código Dart; permissões, plugins, ícone, `AndroidManifest.xml` e versão do Flutter vão à loja). ⛔ Não subir o `version:` para uma correcção.
   - ✅ 2026-11-26: a Shorebird está nos «Prestadores de serviços» da Política de Privacidade e no formulário de segurança dos dados (`PLAY_STORE.md`) — recebe só dados técnicos (app, versão, sistema, identificador aleatório da instalação).
+
+## Réplica da API no Serve2 — sem saldo de dados (2026-11-27)
+
+O Bazá aproveita o acordo do `angoschool.org` com as operadoras: **`https://angoschool.org/baza`** é uma segunda entrada da
+API, que funciona sem saldo de dados. Só o backend tem réplica (a app está no telefone). Regra da casa: o que não está no
+Serve2 pede-se internamente ao Serve1.
+
+- **Réplica**: serviço `baza` no Serve2 (`/var/www/BazaTranquilo/backend`, utilizador `baza`, `127.0.0.1:4000`), MESMA base
+  (replica set). `.env` PRÓPRIO do Serve2 (não é sincronizado): `PERIODIC_TASKS=false`, mapas por `127.0.0.1:4010`, relé do `.org`.
+  Código chega pelo `/root/sync_servers.sh` (push de `backend/` sem `.env`/`src`/`tests`; reinicia a réplica se mudar
+  `dist/`, `node_modules/` ou `panel/`). ⛔ Depois de `npm run build` no Serve1, a réplica reinicia sozinha no minuto seguinte.
+- **Tempo real entre os dois**: `REALTIME_CLUSTER=mongo` (nos dois) → adaptador `@socket.io/mongo-adapter` sobre a colecção
+  capada `socketio_eventos` da base `baza` (`enableClusterAdapter()` em `services/realtime.ts`): emitir, «está ligado?» e desligar
+  sessões valem para as ligações dos DOIS servidores. Prova: `tests/cluster-dois-servidores.mjs` (4 PASS).
+- **Tarefas periódicas só no Serve1** (`PERIODIC_TASKS`): escalar alertas, apagar áudios, expirar referências. A procura de
+  motorista é segura nos dois (cada passo confirma o estado na base antes de mudar).
+- **Mapas**: só no Serve1. Serve1 abre `/interno-serve2/{osrm,photon,mapa}/` (nginx do `bazatranquilo.com`) **só ao IP do
+  Serve2**; no Serve2 o ponto local `127.0.0.1:4010` (`sites-available/baza-replica-interno`) vai lá pelo IP (o AAAA de
+  `bazatranquilo.com` não responde) e guarda as imagens do mapa em cache 7 dias (`/var/cache/nginx/baza_mapa`).
+- **Entrada**: nginx do Serve2, `snippets/baza-org.conf` no bloco de `angoschool.org` (tira o prefixo `/baza`; socket.io em
+  `/baza/socket.io/`; `app-versao.json` pedido ao Serve1).
+- **Chamadas**: relé TURN do Bazá no Serve2 (`turn-baza-org`, coturn em Docker, `/etc/coturn-baza-org/`, portas 3479/5350 e
+  relé 41000–41100/udp só do Serve1), utilizador = `TURN_*` do `.env` da réplica; só reencaminha para os relés do Bazá nos 2 servidores.
+- **App**: `lib/core/servidores.dart` (copiado e adaptado da app AngoSchool): `bazatranquilo.com` principal e
+  `angoschool.org/baza` sem saldo; sonda `GET /health?n=` (marcador `baza-saude-v1`); pergunta antes de mudar
+  (`widgets/escolha_servidor.dart`), faixa «Modo sem saldo», menu › «Ligação ao servidor». Pedidos: leituras repetem no outro
+  servidor; escritas só se a ligação falhou antes de sair. Socket.io volta a ligar ao mudar (`Session._servidorMudou`); em
+  modo sem saldo as chamadas usam `iceTransportPolicy: relay`. Só na compilação de produção (`API_URL=https://bazatranquilo.com`).
+  Teste `test/servidores_test.dart` (5). ⛔ Nas apps instaladas só chega com versão nova na loja.
+- ⚠️ Sem saldo continuam a não funcionar: notificações com a app fechada (Firebase), «Navegar» (Google Maps), correcções
+  Shorebird. ⚠️ Falta o teste do dono com um cartão sem saldo (incluindo uma chamada).
+
+Comandos:
+
+```sh
+# Serve2 (ssh -p 1975 root@109.199.114.6)
+systemctl status baza; journalctl -u baza -f          # réplica da API
+curl -s https://angoschool.org/baza/health?n=teste     # deve devolver o marcador e o n
+docker logs turn-baza-org                              # relé das chamadas
+# Serve1
+grep "\[baza\]" /var/log/sync_servers.log | tail      # sincronizações da réplica
+```
+
+Backups: `/root/baza-env-antes-replica-20261127.bak`, `/root/baza-*.bak_20261127` (Serve1); `/root/nginx-backups/*baza*` e
+`/root/sync_servers.sh.bak_baza_20261127`.

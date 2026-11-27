@@ -37,10 +37,10 @@ cp "$RAIZ/app/android/app/baza-upload.jks" "$DEST/app/android/app/baza-upload.jk
 cd "$DEST/app"
 flutter pub get >/dev/null
 if [ -f shorebird.yaml ]; then
-  shorebird release android --artifact "$EXT" --flutter-version "$VERSAO_FLUTTER" --dart-define=API_URL="$API" --dart-define=APP_VERSAO="$NOME"
+  shorebird release android --artifact "$EXT" --flutter-version "$VERSAO_FLUTTER" --dart-define=API_URL="$API" --dart-define=APP_VERSAO="$NOME" --no-tree-shake-icons
 else
   echo "Sem shorebird.yaml neste commit: compilação normal (esta versão NÃO poderá receber correcções sem loja)."
-  flutter build "$ALVO" --release --dart-define=API_URL="$API" --dart-define=APP_VERSAO="$NOME"
+  flutter build "$ALVO" --release --dart-define=API_URL="$API" --dart-define=APP_VERSAO="$NOME" --no-tree-shake-icons
 fi
 if [ "$ALVO" = appbundle ]; then F=build/app/outputs/bundle/release/app-release.aab; else F=build/app/outputs/flutter-apk/app-release.apk; fi
 mkdir -p "$SAIDA"; cp "$F" "$FINAL"

@@ -99,8 +99,12 @@ authRouter.post('/otp/request', limiter, async (req, res) => {
   if (!(await findAccount(body.role, { phone }))) await assertPhoneFreeForRole(body.role, phone);
   // Com o código desligado no painel, o SMS só serve para confirmar o número de
   // quem cria conta (ou de quem ainda não tem senha); os restantes usam a senha.
-  if (!settings.otpEnabled && (await findAccount(body.role, { phone }))?.passwordHash) {
+  const known = await findAccount(body.role, { phone });
+  if (!settings.otpEnabled && known?.passwordHash) {
     throw new HttpError(403, OTP_OFF);
+  }
+  if (!known && !settings.signupSmsEnabled) {
+    throw new HttpError(403, 'O código por SMS para criar conta está desligado: crie a conta só com a senha.');
   }
   const key = `${body.role}:${phone}`;
   const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
@@ -161,6 +165,12 @@ authRouter.post('/start', limiter, async (req, res) => {
   }
   if (!settings.otpEnabled && hasPassword) {
     res.json({ phone, method: 'password', reason: 'otp_off' });
+    return;
+  }
+  // SMS ao criar conta desligado no painel: conta nova cria-se só com a senha,
+  // com o número por confirmar.
+  if (!existing && !settings.signupSmsEnabled) {
+    res.json({ phone, method: 'signup', reason: 'signup_sms_off', signupTicket: signSignupTicket(phone, body.role) });
     return;
   }
   const key = `${body.role}:${phone}`;
@@ -565,7 +575,8 @@ async function confirmationBlock(req: express.Request): Promise<ConfirmBlock | n
   const mine = req.role === 'driver' ? { driver: req.account._id } : { passenger: req.account._id };
   if (await RideModel.exists({ ...mine, status: { $in: ACTIVE_STATUSES } })) return 'in_ride';
   if (req.role === 'driver' && req.driver.isOnline) return 'online';
-  if (!(await smsLooksHealthy())) return 'sms_down';
+  // Com o SMS ao criar conta desligado no painel, também não se pede depois.
+  if (!settings.signupSmsEnabled || !(await smsLooksHealthy())) return 'sms_down';
   return null;
 }
 

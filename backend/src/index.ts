@@ -28,7 +28,7 @@ import { paymentsRouter } from './routes/payments.js';
 import { expireReferences } from './services/gateway.js';
 import { loadSettings } from './services/settings.js';
 import { sendFile } from './services/files.js';
-import { initRealtime } from './services/realtime.js';
+import { initRealtime, enableClusterAdapter } from './services/realtime.js';
 import { resumeSearches } from './services/rides.js';
 
 const app = express();
@@ -59,8 +59,11 @@ app.use(
   }),
 );
 
-app.get('/health', (_req, res) => {
-  res.json({ ok: true, name: 'Bazá Tranquilo API' });
+app.get('/health', (req, res) => {
+  // Sonda da escolha de servidor do app (2026-11-27): devolve o `n` que recebeu e um marcador — a página de «sem
+  // saldo» das operadoras responde 200 com HTML e não pode passar por servidor vivo.
+  const n = typeof req.query.n === 'string' && /^[a-z0-9]{1,32}$/i.test(req.query.n) ? req.query.n : undefined;
+  res.set('Cache-Control', 'no-store').json({ ok: true, name: 'Bazá Tranquilo API', marcador: 'baza-saude-v1', ...(n ? { n } : {}) });
 });
 // Fotos de perfil: públicas (o app mostra-as a partir de outra origem). Só
 // ficheiros do tipo "avatar" saem por aqui — os documentos são privados.
@@ -103,10 +106,14 @@ await loadSettings();
 await resumeSearches();
 await ensureFirstAdmin();
 await ensureFleetUsers();
-// Alertas de perigo que nenhum agente assumiu sobem para o comando provincial.
-setInterval(() => escalateStaleAlerts().catch((err) => console.error(err)), 30_000).unref();
-setInterval(() => purgeOldAudio().catch((err) => console.error(err)), 3600_000).unref();
-setInterval(() => expireReferences().catch((err) => console.error(err)), 60_000).unref();
+if (config.realtimeCluster) await enableClusterAdapter();
+// Tarefas periódicas só num servidor (réplica no Serve2 com PERIODIC_TASKS=false — 2026-11-27).
+if (config.periodicTasks) {
+  // Alertas de perigo que nenhum agente assumiu sobem para o comando provincial.
+  setInterval(() => escalateStaleAlerts().catch((err) => console.error(err)), 30_000).unref();
+  setInterval(() => purgeOldAudio().catch((err) => console.error(err)), 3600_000).unref();
+  setInterval(() => expireReferences().catch((err) => console.error(err)), 60_000).unref();
+}
 server.listen(config.port, config.host, () => {
   console.log(`Bazá API em http://localhost:${config.port} (${config.isDev ? 'desenvolvimento' : 'produção'})`);
 });
